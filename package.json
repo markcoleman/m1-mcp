@@ -1,0 +1,25 @@
+{
+  "name": "m1-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Example MCP server exposing account tools",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "start:http": "MCP_TRANSPORT=http node dist/server.js",
+    "dev": "tsx src/server.ts",
+    "dev:http": "MCP_TRANSPORT=http tsx src/server.ts",
+    "test": "node dist/test-harness.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.7.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+
+}
