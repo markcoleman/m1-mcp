@@ -15,6 +15,8 @@ export type Transaction = {
   currency: string;
 };
 
+import { fetchMembers1stAccounts } from "./members1st.js";
+
 const accounts: Account[] = [
   {
     id: "acct_001",
@@ -82,14 +84,27 @@ const transactions: Transaction[] = [
   }
 ];
 
-export function getAllAccounts(): Account[] {
+function dataSource(): string {
+  return (process.env.DATA_SOURCE ?? "mock").toLowerCase();
+}
+
+export async function getAllAccounts(): Promise<Account[]> {
+  if (dataSource() === "members1st") {
+    return fetchMembers1stAccounts();
+  }
   return accounts.slice();
 }
 
-export function getAccountById(accountId: string): Account | undefined {
-  return accounts.find((a) => a.id === accountId);
+export async function getAccountById(accountId: string): Promise<Account | undefined> {
+  const all = await getAllAccounts();
+  return all.find((a) => a.id === accountId);
 }
 
-export function getTransactionsForAccount(accountId: string): Transaction[] {
+export async function getTransactionsForAccount(accountId: string): Promise<Transaction[]> {
+  if (dataSource() === "members1st") {
+    // Transactions endpoint is not wired by default.
+    // Keep this empty to avoid mixing real accounts with mock transactions.
+    return [];
+  }
   return transactions.filter((t) => t.accountId === accountId);
 }

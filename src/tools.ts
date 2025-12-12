@@ -20,14 +20,14 @@ export const schemas = {
   })
 };
 
-export function handleGetAllAccounts() {
+export async function handleGetAllAccounts() {
   return {
-    accounts: getAllAccounts()
+    accounts: await getAllAccounts()
   };
 }
 
-export function handleGetAccountDetails(accountId: string) {
-  const account = getAccountById(accountId);
+export async function handleGetAccountDetails(accountId: string) {
+  const account = await getAccountById(accountId);
   if (!account) {
     return {
       error: {
@@ -40,8 +40,8 @@ export function handleGetAccountDetails(accountId: string) {
   return { account };
 }
 
-export function handleGetAccountTransactions(accountId: string) {
-  const account = getAccountById(accountId);
+export async function handleGetAccountTransactions(accountId: string) {
+  const account = await getAccountById(accountId);
   if (!account) {
     return {
       error: {
@@ -53,6 +53,6 @@ export function handleGetAccountTransactions(accountId: string) {
 
   return {
     account,
-    transactions: getTransactionsForAccount(accountId)
+    transactions: await getTransactionsForAccount(accountId)
   };
 }

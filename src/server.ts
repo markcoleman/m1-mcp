@@ -73,8 +73,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   if (name === ToolNames.GetAllAccounts) {
+    const result = await handleGetAllAccounts();
     return {
-      content: [{ type: "text", text: JSON.stringify(handleGetAllAccounts(), null, 2) }]
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
     };
   }
 
@@ -95,7 +96,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-    const result = handleGetAccountDetails(parsed.data.accountId);
+    const result = await handleGetAccountDetails(parsed.data.accountId);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
     };
@@ -118,7 +119,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-    const result = handleGetAccountTransactions(parsed.data.accountId);
+    const result = await handleGetAccountTransactions(parsed.data.accountId);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
     };
