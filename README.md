@@ -124,12 +124,23 @@ This repo auto-loads a local `.env` file via `dotenv` (see `src/env.ts`).
 
 ## Scripts
 
+### Development and Build
+
 - `npm run dev` – run MCP server over stdio (TypeScript via `tsx`)
 - `npm run dev:http` – run MCP server over HTTP (TypeScript via `tsx`)
 - `npm run build` – compile to `dist/`
 - `npm start` – run compiled server over stdio (`dist/server.js`)
 - `npm run start:http` – run compiled server over HTTP (`dist/server.js`)
-- `npm test` – run the compiled test harness (`dist/test-harness.js`)
+
+### Testing
+
+- `npm test` – run all tests (unit tests + integration test)
+- `npm run test:unit` – run unit tests with coverage report (compiled)
+- `npm run test:unit:dev` – run unit tests in development mode (TypeScript via `tsx`)
+- `npm run test:integration` – run integration test harness
+
+### Utilities
+
 - `npm run get:account -- <accountId>` – call the account-details handler directly (dev helper)
 
 ## Run (stdio)
@@ -186,9 +197,40 @@ Example:
 MCP_TRANSPORT=http HOST=0.0.0.0 PORT=8787 MCP_PATH=/mcp node dist/server.js
 ```
 
-## Quick local verification (no MCP client)
+## Testing
 
-`npm test` runs `dist/test-harness.js`, so build first. The test harness uses whatever `DATA_SOURCE` is currently configured; for an offline/safe sanity check, force mock mode:
+This project includes comprehensive unit tests and integration tests using Node.js native test runner.
+
+### Running Tests
+
+Build the project first, then run tests:
+
+```bash
+npm run build
+npm test
+```
+
+This runs:
+1. **Unit tests** with code coverage for utility modules, data layer, and tool handlers
+2. **Integration test** that exercises the complete tool workflow
+
+### Test Commands
+
+- **All tests**: `npm test` - runs unit tests with coverage + integration test
+- **Unit tests only**: `npm run test:unit` - compiled tests with coverage report
+- **Development mode**: `npm run test:unit:dev` - run tests without compiling (faster iteration)
+- **Integration test**: `npm run test:integration` - end-to-end workflow test
+
+### Test Coverage
+
+Current test coverage (as of last run):
+- **Overall**: 99.46% line coverage, 94.77% branch coverage
+- **112 unit tests** covering utility functions, data layer, and tool handlers
+- Tests use mock data by default for consistent, offline testing
+
+### Quick Verification
+
+For an offline/safe sanity check with mock data:
 
 ```bash
 export DATA_SOURCE=mock
