@@ -19,6 +19,17 @@ import {
   schemas
 } from "./tools.js";
 
+/** Default host for HTTP server */
+const DEFAULT_HOST = "127.0.0.1";
+/** Default port for HTTP server */
+const DEFAULT_PORT = 3000;
+/** Default MCP endpoint path */
+const DEFAULT_MCP_PATH = "/mcp";
+/** Default transport type */
+const DEFAULT_TRANSPORT = "stdio";
+/** Maximum request body size in bytes (1 MB) */
+const MAX_REQUEST_BODY_BYTES = 1_000_000;
+
 const server = new Server(
   {
     name: "m1-mcp",
@@ -150,12 +161,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main() {
-  const transportKind = (process.env.MCP_TRANSPORT ?? "stdio").toLowerCase();
+  const transportKind = (process.env.MCP_TRANSPORT ?? DEFAULT_TRANSPORT).toLowerCase();
 
   if (transportKind === "http") {
-    const host = process.env.HOST ?? "127.0.0.1";
-    const port = Number(process.env.PORT ?? "3000");
-    const mcpPath = process.env.MCP_PATH ?? "/mcp";
+    const host = process.env.HOST ?? DEFAULT_HOST;
+    const port = Number(process.env.PORT ?? String(DEFAULT_PORT));
+    const mcpPath = process.env.MCP_PATH ?? DEFAULT_MCP_PATH;
     const enableJsonResponse = (process.env.MCP_ENABLE_JSON_RESPONSE ?? "").toLowerCase() === "true" ||
       process.env.MCP_ENABLE_JSON_RESPONSE === "1";
     const stateless = (process.env.MCP_STATELESS ?? "").toLowerCase() === "true" ||
@@ -220,16 +231,20 @@ async function main() {
   await server.connect(transport);
 }
 
+/**
+ * Reads and parses JSON body from an HTTP request.
+ * Enforces a maximum body size to prevent memory exhaustion.
+ * @param req - The incoming HTTP request
+ * @returns Promise resolving to parsed JSON or undefined for empty body
+ */
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const maxBytes = 1_000_000;
-
   return new Promise((resolve, reject) => {
     let bytes = 0;
     let data = "";
 
     req.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
-      if (bytes > maxBytes) {
+      if (bytes > MAX_REQUEST_BODY_BYTES) {
         reject(new Error("Request body too large"));
         req.destroy();
         return;
