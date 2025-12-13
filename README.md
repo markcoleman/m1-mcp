@@ -4,6 +4,8 @@ Minimal Node.js (TypeScript) MCP server that exposes three tools for account dat
 
 By default it serves a small in-memory mock dataset. You can optionally switch to a "Members 1st" HTTP-backed data source via environment variables.
 
+
+**New to m1-mcp?** See [QUICKSTART.md](QUICKSTART.md) for a 5-minute getting started guide!
 ## Table of Contents
 
 - [Architecture](#architecture)
