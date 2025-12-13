@@ -305,6 +305,47 @@ export MEMBERS1ST_COOKIE='your_cookie_or_cookie_header_here'
 npm run dev:http
 ```
 
+## CI/CD and Automation
+
+This project uses modern DevOps practices with automated workflows:
+
+### GitHub Actions Workflows
+
+- **CI Pipeline** (`.github/workflows/ci.yml`): 
+  - Builds and tests on Node.js 18.x, 20.x, and 22.x
+  - Runs security audits
+  - Validates TypeScript compilation
+  - Uploads build artifacts
+
+- **Release Pipeline** (`.github/workflows/release.yml`):
+  - Automated releases on version tags (e.g., `v1.0.0`)
+  - Generates changelogs
+  - Creates GitHub releases with artifacts
+  - Supports npm publishing (if package is public)
+
+- **Security Scanning** (`.github/workflows/codeql.yml`):
+  - CodeQL analysis for vulnerabilities
+  - Scheduled weekly scans
+  - Security alerts for issues
+
+### Dependency Management
+
+- **Dependabot**: Automatically creates PRs for dependency updates
+- **npm audit**: Runs on every CI build
+- **Grouped updates**: Minor and patch updates grouped together
+
+### GitHub Copilot Assets
+
+AI-assisted development resources available in `.github/`:
+
+- **copilot-instructions.md**: Project-specific guidance for GitHub Copilot
+- **agents/**: Specialized instructions for different development tasks
+  - `code-review.md`: Code review guidelines and checklist
+  - `testing.md`: Testing strategies and patterns
+  - `feature-development.md`: Feature implementation guide
+  - `bug-fixing.md`: Systematic bug fixing workflow
+  - `security.md`: Security best practices and vulnerability handling
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
@@ -314,5 +355,6 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for det
 - Testing requirements
 - Code style and best practices
 - How to submit pull requests
+- CI/CD pipeline details
 
 For bug reports and feature requests, please open an issue on GitHub.
