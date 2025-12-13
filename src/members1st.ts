@@ -381,10 +381,11 @@ function normalizeTransactionSearchOptions(opts: TransactionSearchOptions): Norm
 }
 
 /**
- * Calculates the number of days between two dates.
+ * Calculates the number of days between two dates using UTC date arithmetic.
+ * This avoids issues with daylight saving time transitions.
  * @param startDate - Start date in YYYY-MM-DD format
  * @param endDate - End date in YYYY-MM-DD format
- * @returns Number of days between the dates (positive if endDate > startDate)
+ * @returns Number of days between the dates (positive if endDate >= startDate)
  */
 function daysBetween(startDate: string, endDate: string): number {
   const start = parseIsoDateOnly(startDate);
@@ -395,14 +396,18 @@ function daysBetween(startDate: string, endDate: string): number {
     return DEFAULT_TRANSACTION_DAYS;
   }
   
-  const diffMs = end.getTime() - start.getTime();
+  // Use UTC date parts to avoid DST issues
+  const startUtc = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const endUtc = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+  
+  const diffMs = endUtc - startUtc;
   
   // If start is after end, return 0 (invalid range)
   if (diffMs < 0) {
     return 0;
   }
   
-  // Use Math.round for more accurate day calculation
+  // Calculate days (milliseconds / ms per day)
   return Math.round(diffMs / (1000 * 60 * 60 * 24));
 }
 
@@ -765,6 +770,23 @@ export async function fetchMembers1stTransactions(
     (account?.type === "checking" ? "Draft" : account?.type === "savings" ? "Share" : undefined);
 
   const search = normalizeTransactionSearchOptions(opts);
+  
+  // Validate date range before chunking
+  const parsedStart = parseIsoDateOnly(search.startDate);
+  const parsedEnd = parseIsoDateOnly(search.endDate);
+  
+  if (!parsedStart || !parsedEnd) {
+    throw new Error(
+      `Members1st transactions fetch failed: invalid date format. startDate: ${search.startDate}, endDate: ${search.endDate}`
+    );
+  }
+  
+  if (parsedStart > parsedEnd) {
+    throw new Error(
+      `Members1st transactions fetch failed: startDate must be before or equal to endDate. startDate: ${search.startDate}, endDate: ${search.endDate}`
+    );
+  }
+  
   const chunks = chunkDateRange(search.startDate, search.endDate);
 
   // Fetch all chunks in parallel
