@@ -115,7 +115,7 @@ async function main() {
 
   const expectedQuery: Record<string, string> = {
     billpayOnly: "false",
-    days: "30",  // Days between 2025-11-13 and 2025-12-13
+    days: "30",  // Calculated internally from date range (2025-11-13 to 2025-12-13)
     startDate: "2025-11-13",
     endDate: "2025-12-13",
     advanced: "true",

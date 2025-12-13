@@ -384,7 +384,7 @@ function normalizeTransactionSearchOptions(opts: TransactionSearchOptions): Norm
  * Calculates the number of days between two dates.
  * @param startDate - Start date in YYYY-MM-DD format
  * @param endDate - End date in YYYY-MM-DD format
- * @returns Number of days between the dates
+ * @returns Number of days between the dates (positive if endDate > startDate)
  */
 function daysBetween(startDate: string, endDate: string): number {
   const start = parseIsoDateOnly(startDate);
@@ -396,7 +396,14 @@ function daysBetween(startDate: string, endDate: string): number {
   }
   
   const diffMs = end.getTime() - start.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  
+  // If start is after end, return 0 (invalid range)
+  if (diffMs < 0) {
+    return 0;
+  }
+  
+  // Use Math.round for more accurate day calculation
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
 }
 
 /**
