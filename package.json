@@ -13,7 +13,10 @@
     "get:account": "tsx src/run-get-account.ts",
     "test:members1st-cookie": "tsx src/test-members1st-cookie.ts",
     "test:members1st-transactions": "tsx src/test-members1st-transactions.ts",
-    "test": "node dist/test-harness.js"
+    "test:unit": "DATA_SOURCE=mock node --test --experimental-test-coverage dist/**/*.test.js",
+    "test:unit:dev": "DATA_SOURCE=mock tsx --test src/**/*.test.ts",
+    "test:integration": "node dist/test-harness.js",
+    "test": "npm run test:unit && npm run test:integration"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
