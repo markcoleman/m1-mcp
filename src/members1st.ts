@@ -1,4 +1,4 @@
-import type { Account } from "./data.js";
+import type { Account, Transaction } from "./data.js";
 
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -122,12 +122,78 @@ function parseAdditionalHeaders(): Record<string, string> {
 
     const headers: Record<string, string> = {};
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value === "string") headers[key] = value;
+      if (typeof value === "string") headers[key] = sanitizeHeaderValue(value);
     }
     return headers;
   } catch {
     return {};
   }
+}
+
+type TransactionSearchOptions = {
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
+  days?: number;
+  billpayOnly?: boolean;
+  advanced?: boolean;
+  actionCode?: string;
+  sourceCode?: string;
+};
+
+function isoDateOnly(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function parseIsoDateOnly(s: string): Date | undefined {
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d;
+}
+
+function toIsoDateOnly(v: unknown): string {
+  if (typeof v === "string") {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) return isoDateOnly(d);
+    return v;
+  }
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return isoDateOnly(v);
+  return isoDateOnly(new Date());
+}
+
+function pickAmount(item: any): number {
+  const direct = pickNumber(item?.amount ?? item?.transactionAmount ?? item?.value ?? item?.netAmount);
+  if (typeof direct === "number") return direct;
+
+  const debit = pickNumber(item?.debit ?? item?.debitAmount);
+  const credit = pickNumber(item?.credit ?? item?.creditAmount);
+  if (typeof debit === "number" || typeof credit === "number") {
+    return (credit ?? 0) - (debit ?? 0);
+  }
+
+  // Some APIs use separate sign indicators.
+  const signed = pickNumber(item?.signedAmount);
+  if (typeof signed === "number") return signed;
+
+  return 0;
+}
+
+function mapTransaction(item: any, accountId: string, index: number): Transaction {
+  const id = String(
+    item?.id ?? item?.activityId ?? item?.transactionId ?? item?.key ?? `txn_${String(index + 1).padStart(4, "0")}`
+  );
+  const postedAt = toIsoDateOnly(
+    item?.postedAt ??
+      item?.postedDate ??
+      item?.postDate ??
+      item?.date ??
+      item?.activityDate ??
+      item?.transactionDate ??
+      item?.effectiveDate
+  );
+  const description = String(item?.description ?? item?.memo ?? item?.payee ?? item?.name ?? item?.details ?? id);
+  const amount = pickAmount(item);
+  const currency = String(item?.currency ?? item?.currencyCode ?? item?.isoCurrencyCode ?? "USD");
+  return { id, accountId, postedAt, description, amount, currency };
 }
 
 function inferType(raw: unknown): Account["type"] {
@@ -231,7 +297,13 @@ function mapMembers1stProduct(parent: any, product: any, parentKey: string, prod
     pickNumber(product?.ledgerBalance) ??
     0;
 
-  return { id, name, type, currency, balance };
+  const members1st = {
+    accountKey: parentKey,
+    productId,
+    productCode: typeof product?.code === "string" ? product.code : undefined
+  };
+
+  return { id, name, type, currency, balance, members1st };
 }
 
 function mapMembers1stAccountDetails(details: any, detailsIndex: number): Account[] {
@@ -289,4 +361,89 @@ export async function fetchMembers1stAccounts(): Promise<Account[]> {
   }
 
   return mapped;
+}
+
+export async function fetchMembers1stTransactions(
+  accountId: string,
+  opts: TransactionSearchOptions = {}
+): Promise<Transaction[]> {
+  // accountId is expected to be `<accountKey>:<productId>`.
+  const [accountKeyFromId, productIdFromId] = accountId.split(":");
+
+  // Best-effort metadata lookup for referer/type; not strictly required by all deployments.
+  const allAccounts = await fetchMembers1stAccounts();
+  const account = allAccounts.find((a) => a.id === accountId);
+
+  const accountKey = account?.members1st?.accountKey ?? accountKeyFromId;
+  const productId = account?.members1st?.productId ?? productIdFromId;
+
+  if (!accountKey || !productId) {
+    throw new Error(
+      "Members1st transactions fetch failed: missing accountKey/productId. Use an account id returned by get_all_accounts (format: <accountKey>:<productId>)."
+    );
+  }
+
+  const productCode =
+    account?.members1st?.productCode ??
+    (account?.type === "checking" ? "Draft" : account?.type === "savings" ? "Share" : undefined);
+
+  const base = process.env.MEMBERS1ST_TRANSACTIONS_URL_BASE ?? "https://myonline.members1st.org/api/v1/Transactions";
+  const url = new URL(`${base.replace(/\/$/, "")}/${encodeURIComponent(accountKey)}/${encodeURIComponent(productId)}`);
+
+  const end = opts.endDate ?? isoDateOnly(new Date());
+  const days = typeof opts.days === "number" && Number.isFinite(opts.days) ? Math.max(1, Math.min(365, opts.days)) : 30;
+  const start = opts.startDate ?? (() => {
+    const endDate = parseIsoDateOnly(end) ?? new Date();
+    const d = new Date(endDate);
+    d.setUTCDate(d.getUTCDate() - days);
+    return isoDateOnly(d);
+  })();
+
+  url.searchParams.set("billpayOnly", String(opts.billpayOnly ?? false));
+  url.searchParams.set("days", String(days));
+  url.searchParams.set("startDate", start);
+  url.searchParams.set("endDate", end);
+  url.searchParams.set("advanced", String(opts.advanced ?? true));
+  url.searchParams.set("actionCode", opts.actionCode ?? "*");
+  url.searchParams.set("sourceCode", opts.sourceCode ?? "*");
+
+  const origin = process.env.MEMBERS1ST_ORIGIN ?? "https://myonline.members1st.org";
+  const referer = productCode
+    ? `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}&type=${encodeURIComponent(productCode)}`
+    : `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}`;
+
+  const headers: Record<string, string> = {
+    Accept: "application/json, text/plain, */*",
+    Origin: origin,
+    Referer: referer,
+    ...parseAdditionalHeaders()
+  };
+
+  const cookie = process.env.MEMBERS1ST_COOKIE;
+  if (cookie) headers.Cookie = buildCookieHeader(cookie);
+
+  const authorization = process.env.MEMBERS1ST_AUTHORIZATION;
+  if (authorization) headers.Authorization = authorization;
+
+  const res = await httpGet(url.toString(), headers, 5);
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    const text = res.body ?? "";
+    throw new Error(
+      `Members1st transactions fetch failed: ${res.statusCode} ${res.statusMessage}${text ? ` - ${text.slice(0, 300)}` : ""}`
+    );
+  }
+
+  const json = JSON.parse(res.body || "null") as any;
+  const items: any[] =
+    Array.isArray(json)
+      ? json
+      : Array.isArray(json?.transactions)
+        ? json.transactions
+        : Array.isArray(json?.items)
+          ? json.items
+          : Array.isArray(json?.data)
+            ? json.data
+            : [];
+
+  return items.map((t, idx) => mapTransaction(t, accountId, idx));
 }

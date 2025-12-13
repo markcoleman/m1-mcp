@@ -12,6 +12,7 @@
     "dev:http": "MCP_TRANSPORT=http tsx src/server.ts",
     "get:account": "tsx src/run-get-account.ts",
     "test:members1st-cookie": "tsx src/test-members1st-cookie.ts",
+    "test:members1st-transactions": "tsx src/test-members1st-transactions.ts",
     "test": "node dist/test-harness.js"
   },
   "dependencies": {

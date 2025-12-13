@@ -4,6 +4,11 @@ export type Account = {
   type: "checking" | "savings" | "credit";
   currency: string;
   balance: number;
+  members1st?: {
+    accountKey: string;
+    productId: string;
+    productCode?: string;
+  };
 };
 
 export type Transaction = {
@@ -15,7 +20,7 @@ export type Transaction = {
   currency: string;
 };
 
-import { fetchMembers1stAccounts } from "./members1st.js";
+import { fetchMembers1stAccounts, fetchMembers1stTransactions } from "./members1st.js";
 
 const accounts: Account[] = [
   {
@@ -100,11 +105,20 @@ export async function getAccountById(accountId: string): Promise<Account | undef
   return all.find((a) => a.id === accountId);
 }
 
-export async function getTransactionsForAccount(accountId: string): Promise<Transaction[]> {
+export async function getTransactionsForAccount(
+  accountId: string,
+  opts?: {
+    startDate?: string;
+    endDate?: string;
+    days?: number;
+    billpayOnly?: boolean;
+    advanced?: boolean;
+    actionCode?: string;
+    sourceCode?: string;
+  }
+): Promise<Transaction[]> {
   if (dataSource() === "members1st") {
-    // Transactions endpoint is not wired by default.
-    // Keep this empty to avoid mixing real accounts with mock transactions.
-    return [];
+    return fetchMembers1stTransactions(accountId, opts);
   }
   return transactions.filter((t) => t.accountId === accountId);
 }

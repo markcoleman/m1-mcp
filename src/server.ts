@@ -59,7 +59,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {
-            accountId: { type: "string", description: "Account identifier" }
+            accountId: { type: "string", description: "Account identifier" },
+            startDate: { type: "string", description: "YYYY-MM-DD" },
+            endDate: { type: "string", description: "YYYY-MM-DD" },
+            days: { type: "number", description: "Number of days of history (default 30)" },
+            billpayOnly: { type: "boolean", description: "Filter to billpay transactions only" },
+            advanced: { type: "boolean", description: "Enable advanced search (Members1st)" },
+            actionCode: { type: "string", description: "Action code filter (Members1st), e.g. *" },
+            sourceCode: { type: "string", description: "Source code filter (Members1st), e.g. *" }
           },
           required: ["accountId"],
           additionalProperties: false
@@ -119,7 +126,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-    const result = await handleGetAccountTransactions(parsed.data.accountId);
+    const { accountId, ...opts } = parsed.data;
+    const result = await handleGetAccountTransactions(accountId, opts);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
     };

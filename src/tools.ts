@@ -16,7 +16,14 @@ export const schemas = {
     accountId: z.string().min(1)
   }),
   getAccountTransactions: z.object({
-    accountId: z.string().min(1)
+    accountId: z.string().min(1),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    days: z.number().int().positive().max(365).optional(),
+    billpayOnly: z.boolean().optional(),
+    advanced: z.boolean().optional(),
+    actionCode: z.string().optional(),
+    sourceCode: z.string().optional()
   })
 };
 
@@ -40,7 +47,18 @@ export async function handleGetAccountDetails(accountId: string) {
   return { account };
 }
 
-export async function handleGetAccountTransactions(accountId: string) {
+export async function handleGetAccountTransactions(
+  accountId: string,
+  opts?: {
+    startDate?: string;
+    endDate?: string;
+    days?: number;
+    billpayOnly?: boolean;
+    advanced?: boolean;
+    actionCode?: string;
+    sourceCode?: string;
+  }
+) {
   const account = await getAccountById(accountId);
   if (!account) {
     return {
@@ -53,6 +71,6 @@ export async function handleGetAccountTransactions(accountId: string) {
 
   return {
     account,
-    transactions: await getTransactionsForAccount(accountId)
+    transactions: await getTransactionsForAccount(accountId, opts)
   };
 }
