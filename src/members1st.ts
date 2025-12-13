@@ -58,8 +58,8 @@ function isApiLoggingEnabled(): boolean {
   const nodeEnv = (process.env.NODE_ENV ?? "").toLowerCase();
   const logRequests = process.env.LOG_API_REQUESTS;
   
-  // If LOG_API_REQUESTS is explicitly set, use that value
-  if (logRequests !== undefined && logRequests !== "") {
+  // If LOG_API_REQUESTS is explicitly set to a non-empty value, use that value
+  if (logRequests !== undefined && logRequests.trim() !== "") {
     return logRequests === "1" || logRequests.toLowerCase() === "true";
   }
   
