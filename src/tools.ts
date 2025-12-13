@@ -19,7 +19,8 @@ export const schemas = {
     accountId: z.string().min(1),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
-    days: z.number().int().positive().max(365).optional(),
+    // The underlying API supports a maximum of 180 days per request (no paging).
+    days: z.number().int().positive().max(180).optional(),
     billpayOnly: z.boolean().optional(),
     advanced: z.boolean().optional(),
     actionCode: z.string().optional(),
