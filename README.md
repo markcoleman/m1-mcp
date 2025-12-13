@@ -296,6 +296,21 @@ Important:
 - `MEMBERS1ST_CACHE_TTL_MS`: cache duration for accounts fetch (default `30000`)
 - `MEMBERS1ST_DISABLE_CACHE`: set to `true`/`1` to disable the accounts cache
 
+#### API Request Logging
+
+API requests are logged to stderr with color coding by default (when not in production mode). This helps with debugging and development.
+
+- `LOG_API_REQUESTS`: set to `true`/`1` to enable API request logging, `false`/`0` to disable (default: enabled unless `NODE_ENV=production`)
+- `LOG_API_RESPONSES`: set to `true`/`1` to enable API response body logging (default: `false`)
+- `NODE_ENV`: set to `production` to disable API request logging by default
+
+Logged information includes:
+- Request method and URL path
+- Query parameters (with color coding)
+- Request headers (with sensitive values like Cookie and Authorization redacted)
+- Response status code and message (when `LOG_API_RESPONSES` is enabled)
+- Response body preview (when `LOG_API_RESPONSES` is enabled, truncated to 500 characters)
+
 #### Example
 
 ```bash
