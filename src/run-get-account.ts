@@ -1,3 +1,5 @@
+import "./env.js";
+
 import { handleGetAccountDetails } from "./tools.js";
 
 function parseAccountId(argv: string[]): string | undefined {

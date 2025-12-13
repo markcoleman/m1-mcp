@@ -4,6 +4,15 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { URL } from "node:url";
 
+const DEFAULT_ACCOUNTS_URL = "https://myonline.members1st.org/api/v1/account";
+const DEFAULT_TRANSACTIONS_URL_BASE = "https://myonline.members1st.org/api/v1/Transactions";
+const DEFAULT_ORIGIN = "https://myonline.members1st.org";
+
+const DEFAULT_ACCOUNTS_CACHE_TTL_MS = 30_000;
+const DEFAULT_TRANSACTION_DAYS = 30;
+const MAX_TRANSACTION_DAYS = 365;
+const DEFAULT_MAX_REDIRECTS = 5;
+
 function envBool(name: string): boolean {
   const v = process.env[name];
   if (!v) return false;
@@ -30,6 +39,18 @@ type HttpResult = {
   headers: Record<string, string | string[] | undefined>;
   body: string;
 };
+
+function parseJson(body: string | undefined): any {
+  return JSON.parse(body || "null") as any;
+}
+
+function extractArray(json: any, preferredKeys: string[]): any[] {
+  if (Array.isArray(json)) return json;
+  for (const key of preferredKeys) {
+    if (Array.isArray(json?.[key])) return json[key];
+  }
+  return [];
+}
 
 function sanitizeHeaderValue(value: string): string {
   // Prevent invalid header characters; avoid header injection.
@@ -130,6 +151,21 @@ function parseAdditionalHeaders(): Record<string, string> {
   }
 }
 
+function buildRequestHeaders(base: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = {
+    ...base,
+    ...parseAdditionalHeaders()
+  };
+
+  const cookie = process.env.MEMBERS1ST_COOKIE;
+  if (cookie) headers.Cookie = buildCookieHeader(cookie);
+
+  const authorization = process.env.MEMBERS1ST_AUTHORIZATION;
+  if (authorization) headers.Authorization = authorization;
+
+  return headers;
+}
+
 type TransactionSearchOptions = {
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
@@ -140,6 +176,14 @@ type TransactionSearchOptions = {
   sourceCode?: string;
 };
 
+type NormalizedTransactionSearch = Required<
+  Pick<TransactionSearchOptions, "billpayOnly" | "advanced" | "actionCode" | "sourceCode">
+> & {
+  days: number;
+  startDate: string;
+  endDate: string;
+};
+
 function isoDateOnly(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -148,6 +192,32 @@ function parseIsoDateOnly(s: string): Date | undefined {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return undefined;
   return d;
+}
+
+function normalizeTransactionSearchOptions(opts: TransactionSearchOptions): NormalizedTransactionSearch {
+  const endDate = opts.endDate ?? isoDateOnly(new Date());
+
+  const daysRaw = typeof opts.days === "number" && Number.isFinite(opts.days) ? opts.days : DEFAULT_TRANSACTION_DAYS;
+  const days = Math.max(1, Math.min(MAX_TRANSACTION_DAYS, Math.trunc(daysRaw)));
+
+  const startDate =
+    opts.startDate ??
+    (() => {
+      const end = parseIsoDateOnly(endDate) ?? new Date();
+      const d = new Date(end);
+      d.setUTCDate(d.getUTCDate() - days);
+      return isoDateOnly(d);
+    })();
+
+  return {
+    startDate,
+    endDate,
+    days,
+    billpayOnly: opts.billpayOnly ?? false,
+    advanced: opts.advanced ?? true,
+    actionCode: opts.actionCode ?? "*",
+    sourceCode: opts.sourceCode ?? "*"
+  };
 }
 
 function toIsoDateOnly(v: unknown): string {
@@ -265,7 +335,9 @@ function mapAccount(item: any, index: number): Account {
 }
 
 function mapMembers1stProduct(parent: any, product: any, parentKey: string, productIndex: number): Account {
-  const productId = String(product?.id ?? product?.productId ?? product?.product_id ?? `p_${String(productIndex + 1).padStart(2, "0")}`);
+  const productId = String(
+    product?.id ?? product?.productId ?? product?.product_id ?? `p_${String(productIndex + 1).padStart(2, "0")}`
+  );
   const id = `${parentKey}:${productId}`;
 
   const productName = String(
@@ -324,24 +396,14 @@ function mapMembers1stAccountDetails(details: any, detailsIndex: number): Accoun
 }
 
 export async function fetchMembers1stAccounts(): Promise<Account[]> {
-  const ttlMs = envNumber("MEMBERS1ST_CACHE_TTL_MS", 30_000);
+  const ttlMs = envNumber("MEMBERS1ST_CACHE_TTL_MS", DEFAULT_ACCOUNTS_CACHE_TTL_MS);
   const now = Date.now();
   if (accountsCache && accountsCache.expiresAtMs > now) return accountsCache.value;
 
-  const url = process.env.MEMBERS1ST_ACCOUNTS_URL ?? "https://myonline.members1st.org/api/v1/account";
+  const url = process.env.MEMBERS1ST_ACCOUNTS_URL ?? DEFAULT_ACCOUNTS_URL;
+  const headers = buildRequestHeaders({ Accept: "application/json" });
 
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    ...parseAdditionalHeaders()
-  };
-
-  const cookie = process.env.MEMBERS1ST_COOKIE;
-  if (cookie) headers.Cookie = buildCookieHeader(cookie);
-
-  const authorization = process.env.MEMBERS1ST_AUTHORIZATION;
-  if (authorization) headers.Authorization = authorization;
-
-  const res = await httpGet(url, headers, 5);
+  const res = await httpGet(url, headers, DEFAULT_MAX_REDIRECTS);
 
   if (res.statusCode < 200 || res.statusCode >= 300) {
     const text = res.body ?? "";
@@ -350,9 +412,8 @@ export async function fetchMembers1stAccounts(): Promise<Account[]> {
     );
   }
 
-  const json = JSON.parse(res.body || "null") as any;
-  const items: any[] =
-    Array.isArray(json) ? json : Array.isArray(json?.accounts) ? json.accounts : Array.isArray(json?.data) ? json.data : [];
+  const json = parseJson(res.body);
+  const items: any[] = extractArray(json, ["accounts", "data"]);
 
   const mapped = items.flatMap((item, idx) => mapMembers1stAccountDetails(item, idx));
 
@@ -387,45 +448,30 @@ export async function fetchMembers1stTransactions(
     account?.members1st?.productCode ??
     (account?.type === "checking" ? "Draft" : account?.type === "savings" ? "Share" : undefined);
 
-  const base = process.env.MEMBERS1ST_TRANSACTIONS_URL_BASE ?? "https://myonline.members1st.org/api/v1/Transactions";
+  const base = process.env.MEMBERS1ST_TRANSACTIONS_URL_BASE ?? DEFAULT_TRANSACTIONS_URL_BASE;
   const url = new URL(`${base.replace(/\/$/, "")}/${encodeURIComponent(accountKey)}/${encodeURIComponent(productId)}`);
 
-  const end = opts.endDate ?? isoDateOnly(new Date());
-  const days = typeof opts.days === "number" && Number.isFinite(opts.days) ? Math.max(1, Math.min(365, opts.days)) : 30;
-  const start = opts.startDate ?? (() => {
-    const endDate = parseIsoDateOnly(end) ?? new Date();
-    const d = new Date(endDate);
-    d.setUTCDate(d.getUTCDate() - days);
-    return isoDateOnly(d);
-  })();
+  const search = normalizeTransactionSearchOptions(opts);
+  url.searchParams.set("billpayOnly", String(search.billpayOnly));
+  url.searchParams.set("days", String(search.days));
+  url.searchParams.set("startDate", search.startDate);
+  url.searchParams.set("endDate", search.endDate);
+  url.searchParams.set("advanced", String(search.advanced));
+  url.searchParams.set("actionCode", search.actionCode);
+  url.searchParams.set("sourceCode", search.sourceCode);
 
-  url.searchParams.set("billpayOnly", String(opts.billpayOnly ?? false));
-  url.searchParams.set("days", String(days));
-  url.searchParams.set("startDate", start);
-  url.searchParams.set("endDate", end);
-  url.searchParams.set("advanced", String(opts.advanced ?? true));
-  url.searchParams.set("actionCode", opts.actionCode ?? "*");
-  url.searchParams.set("sourceCode", opts.sourceCode ?? "*");
-
-  const origin = process.env.MEMBERS1ST_ORIGIN ?? "https://myonline.members1st.org";
+  const origin = process.env.MEMBERS1ST_ORIGIN ?? DEFAULT_ORIGIN;
   const referer = productCode
     ? `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}&type=${encodeURIComponent(productCode)}`
     : `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}`;
 
-  const headers: Record<string, string> = {
+  const headers = buildRequestHeaders({
     Accept: "application/json, text/plain, */*",
     Origin: origin,
-    Referer: referer,
-    ...parseAdditionalHeaders()
-  };
+    Referer: referer
+  });
 
-  const cookie = process.env.MEMBERS1ST_COOKIE;
-  if (cookie) headers.Cookie = buildCookieHeader(cookie);
-
-  const authorization = process.env.MEMBERS1ST_AUTHORIZATION;
-  if (authorization) headers.Authorization = authorization;
-
-  const res = await httpGet(url.toString(), headers, 5);
+  const res = await httpGet(url.toString(), headers, DEFAULT_MAX_REDIRECTS);
   if (res.statusCode < 200 || res.statusCode >= 300) {
     const text = res.body ?? "";
     throw new Error(
@@ -433,17 +479,8 @@ export async function fetchMembers1stTransactions(
     );
   }
 
-  const json = JSON.parse(res.body || "null") as any;
-  const items: any[] =
-    Array.isArray(json)
-      ? json
-      : Array.isArray(json?.transactions)
-        ? json.transactions
-        : Array.isArray(json?.items)
-          ? json.items
-          : Array.isArray(json?.data)
-            ? json.data
-            : [];
+  const json = parseJson(res.body);
+  const items: any[] = extractArray(json, ["transactions", "items", "data"]);
 
   return items.map((t, idx) => mapTransaction(t, accountId, idx));
 }

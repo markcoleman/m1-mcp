@@ -1,3 +1,5 @@
+import "./env.js";
+
 import { createServer } from "node:http";
 import { fetchMembers1stAccounts } from "./members1st.js";
 

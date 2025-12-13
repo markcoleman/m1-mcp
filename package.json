@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
+    "dotenv": "^17.2.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -24,5 +25,4 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
-
 }

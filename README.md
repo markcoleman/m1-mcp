@@ -18,6 +18,13 @@ The server uses an in-memory mock dataset in `src/data.ts`.
 npm install
 ```
 
+## Environment (.env)
+
+This repo auto-loads a local `.env` file via `dotenv`.
+
+- Copy `.env.example` to `.env` and fill in values.
+- Do not commit `.env` (it is gitignored).
+
 ## Build
 
 ```bash
@@ -123,3 +130,31 @@ Input:
 ```json
 { "accountId": "acct_001" }
 ```
+
+## Using real data (Members 1st)
+
+By default, the server uses the in-memory mock dataset in `src/data.ts`.
+
+You can switch the data source to fetch accounts from the Members 1st endpoint at runtime.
+
+Important:
+
+- Don’t paste cookies/tokens into `README.md` or commit them.
+- Provide secrets via environment variables only.
+
+### Env vars
+
+- `DATA_SOURCE`: `mock` (default) or `members1st`
+- `MEMBERS1ST_ACCOUNTS_URL`: defaults to `https://myonline.members1st.org/api/v1/account`
+- `MEMBERS1ST_COOKIE`: value for the `Cookie` header (recommended if you’re using a browser session)
+- `MEMBERS1ST_AUTHORIZATION`: value for the `Authorization` header (e.g. `Bearer ...`) if applicable
+- `MEMBERS1ST_HEADERS_JSON`: optional JSON object string of *extra* headers your environment requires (kept out of logs)
+- `MEMBERS1ST_CACHE_TTL_MS`: cache duration for accounts fetch (default `30000`)
+
+### Example
+
+```bash
+export DATA_SOURCE=members1st
+export MEMBERS1ST_COOKIE='your_cookie_header_here'
+
+npm run dev:http
