@@ -10,7 +10,8 @@ const DEFAULT_ORIGIN = "https://myonline.members1st.org";
 
 const DEFAULT_ACCOUNTS_CACHE_TTL_MS = 30_000;
 const DEFAULT_TRANSACTION_DAYS = 30;
-const MAX_TRANSACTION_DAYS = 365;
+// Members 1st transactions endpoint supports up to 180 days per call and does not support paging.
+const MAX_TRANSACTION_DAYS = 180;
 const DEFAULT_MAX_REDIRECTS = 5;
 
 function envBool(name: string): boolean {
