@@ -208,6 +208,17 @@ This project uses TypeScript with strict mode enabled. Please follow these guide
 6. Ensure all tests pass
 7. Submit a pull request
 
+### Continuous Integration
+
+All pull requests automatically run through our CI/CD pipeline:
+
+- **Build & Test**: Runs on Node.js 18.x, 20.x, and 22.x
+- **Linting**: Code style and format checks (if configured)
+- **Security**: npm audit and CodeQL scanning
+- **Dependency Updates**: Automated via Dependabot
+
+You can view workflow status in the "Actions" tab of the repository. All checks must pass before a PR can be merged.
+
 ### Pull Request Guidelines
 
 - Provide a clear description of the changes
