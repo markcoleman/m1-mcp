@@ -41,7 +41,7 @@ export type Transaction = {
   currency: string;
 };
 
-import { fetchMembers1stAccounts, fetchMembers1stTransactions } from "./members1st.js";
+import { fetchMembers1stAccounts, fetchMembers1stTransactions } from "./members1st/index.js";
 
 const accounts: Account[] = [
   {
