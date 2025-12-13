@@ -23,14 +23,8 @@ export const schemas = {
   }),
   getAccountTransactions: z.object({
     accountId: z.string().min(1),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    // The underlying API supports a maximum of 180 days per request (no paging).
-    days: z.number().int().positive().max(180).optional(),
-    billpayOnly: z.boolean().optional(),
-    advanced: z.boolean().optional(),
-    actionCode: z.string().optional(),
-    sourceCode: z.string().optional()
+    startDate: z.string().optional().describe("Start date in YYYY-MM-DD format"),
+    endDate: z.string().optional().describe("End date in YYYY-MM-DD format")
   })
 };
 
@@ -69,17 +63,13 @@ export async function handleGetAccountDetails(accountId: string) {
 
 /**
  * Handler for the get_account_transactions tool.
- * Retrieves transactions for a specific account with optional filtering.
+ * Retrieves transactions for a specific account with optional date filtering.
+ * If the date range exceeds 180 days, the request is automatically chunked and responses are merged.
  *
  * @param accountId - The unique identifier of the account
  * @param opts - Optional filters for the transaction query
- * @param opts.startDate - Start date in YYYY-MM-DD format
- * @param opts.endDate - End date in YYYY-MM-DD format
- * @param opts.days - Number of days to retrieve (1-180, default 30)
- * @param opts.billpayOnly - Filter to bill pay transactions only
- * @param opts.advanced - Enable advanced search (Members1st specific)
- * @param opts.actionCode - Action code filter (Members1st specific)
- * @param opts.sourceCode - Source code filter (Members1st specific)
+ * @param opts.startDate - Start date in YYYY-MM-DD format (defaults to 30 days ago)
+ * @param opts.endDate - End date in YYYY-MM-DD format (defaults to today)
  * @returns Object containing account details and transactions, or an error if account not found
  */
 export async function handleGetAccountTransactions(
@@ -87,11 +77,6 @@ export async function handleGetAccountTransactions(
   opts?: {
     startDate?: string;
     endDate?: string;
-    days?: number;
-    billpayOnly?: boolean;
-    advanced?: boolean;
-    actionCode?: string;
-    sourceCode?: string;
   }
 ) {
   const account = await getAccountById(accountId);

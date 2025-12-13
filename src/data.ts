@@ -140,16 +140,12 @@ export async function getAccountById(accountId: string): Promise<Account | undef
 }
 
 /**
- * Retrieves transactions for a specific account with optional filtering.
+ * Retrieves transactions for a specific account with optional date filtering.
+ * If the date range exceeds 180 days, requests are automatically chunked and merged.
  * @param accountId - The unique identifier of the account
  * @param opts - Optional filters for transactions
- * @param opts.startDate - Start date in YYYY-MM-DD format
- * @param opts.endDate - End date in YYYY-MM-DD format
- * @param opts.days - Number of days to retrieve (1-180)
- * @param opts.billpayOnly - Filter to bill pay transactions only
- * @param opts.advanced - Enable advanced search (Members1st)
- * @param opts.actionCode - Action code filter (Members1st)
- * @param opts.sourceCode - Source code filter (Members1st)
+ * @param opts.startDate - Start date in YYYY-MM-DD format (defaults to 30 days ago)
+ * @param opts.endDate - End date in YYYY-MM-DD format (defaults to today)
  * @returns Promise resolving to array of transactions
  */
 export async function getTransactionsForAccount(
@@ -157,11 +153,6 @@ export async function getTransactionsForAccount(
   opts?: {
     startDate?: string;
     endDate?: string;
-    days?: number;
-    billpayOnly?: boolean;
-    advanced?: boolean;
-    actionCode?: string;
-    sourceCode?: string;
   }
 ): Promise<Transaction[]> {
   if (dataSource() === "members1st") {

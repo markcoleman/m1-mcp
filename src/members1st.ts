@@ -345,17 +345,9 @@ function buildRequestHeaders(base: Record<string, string>): Record<string, strin
 type TransactionSearchOptions = {
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
-  days?: number;
-  billpayOnly?: boolean;
-  advanced?: boolean;
-  actionCode?: string;
-  sourceCode?: string;
 };
 
-type NormalizedTransactionSearch = Required<
-  Pick<TransactionSearchOptions, "billpayOnly" | "advanced" | "actionCode" | "sourceCode">
-> & {
-  days: number;
+type NormalizedTransactionSearch = {
   startDate: string;
   endDate: string;
 };
@@ -373,27 +365,69 @@ function parseIsoDateOnly(s: string): Date | undefined {
 function normalizeTransactionSearchOptions(opts: TransactionSearchOptions): NormalizedTransactionSearch {
   const endDate = opts.endDate ?? isoDateOnly(new Date());
 
-  const daysRaw = typeof opts.days === "number" && Number.isFinite(opts.days) ? opts.days : DEFAULT_TRANSACTION_DAYS;
-  const days = Math.max(1, Math.min(MAX_TRANSACTION_DAYS, Math.trunc(daysRaw)));
-
   const startDate =
     opts.startDate ??
     (() => {
       const end = parseIsoDateOnly(endDate) ?? new Date();
       const d = new Date(end);
-      d.setUTCDate(d.getUTCDate() - days);
+      d.setUTCDate(d.getUTCDate() - DEFAULT_TRANSACTION_DAYS);
       return isoDateOnly(d);
     })();
 
   return {
     startDate,
-    endDate,
-    days,
-    billpayOnly: opts.billpayOnly ?? false,
-    advanced: opts.advanced ?? true,
-    actionCode: opts.actionCode ?? "*",
-    sourceCode: opts.sourceCode ?? "*"
+    endDate
   };
+}
+
+/**
+ * Calculates the number of days between two dates.
+ * @param startDate - Start date in YYYY-MM-DD format
+ * @param endDate - End date in YYYY-MM-DD format
+ * @returns Number of days between the dates
+ */
+function daysBetween(startDate: string, endDate: string): number {
+  const start = parseIsoDateOnly(startDate) ?? new Date();
+  const end = parseIsoDateOnly(endDate) ?? new Date();
+  const diffMs = end.getTime() - start.getTime();
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Chunks a date range into segments of at most MAX_TRANSACTION_DAYS days.
+ * @param startDate - Start date in YYYY-MM-DD format
+ * @param endDate - End date in YYYY-MM-DD format
+ * @returns Array of date range chunks, each with startDate and endDate
+ */
+function chunkDateRange(startDate: string, endDate: string): Array<{ startDate: string; endDate: string }> {
+  const totalDays = daysBetween(startDate, endDate);
+  
+  if (totalDays <= MAX_TRANSACTION_DAYS) {
+    return [{ startDate, endDate }];
+  }
+
+  const chunks: Array<{ startDate: string; endDate: string }> = [];
+  let currentStart = parseIsoDateOnly(startDate) ?? new Date();
+  const finalEnd = parseIsoDateOnly(endDate) ?? new Date();
+
+  while (currentStart <= finalEnd) {
+    const chunkEnd = new Date(currentStart);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + MAX_TRANSACTION_DAYS);
+    
+    // Don't exceed the final end date
+    const actualEnd = chunkEnd > finalEnd ? finalEnd : chunkEnd;
+    
+    chunks.push({
+      startDate: isoDateOnly(currentStart),
+      endDate: isoDateOnly(actualEnd)
+    });
+    
+    // Move to the next chunk (day after the end of this chunk)
+    currentStart = new Date(actualEnd);
+    currentStart.setUTCDate(currentStart.getUTCDate() + 1);
+  }
+
+  return chunks;
 }
 
 function toIsoDateOnly(v: unknown): string {
@@ -607,10 +641,73 @@ export async function fetchMembers1stAccounts(): Promise<Account[]> {
 }
 
 /**
+ * Fetches transactions for a single date range chunk from the Members1st API.
+ * This is an internal helper that fetches at most 180 days of transactions.
+ * @param accountId - The account ID (format: accountKey:productId)
+ * @param accountKey - Account key from Members1st system
+ * @param productId - Product ID from Members1st system
+ * @param productCode - Product code (Draft, Share, etc.)
+ * @param startDate - Start date in YYYY-MM-DD format
+ * @param endDate - End date in YYYY-MM-DD format
+ * @returns Promise resolving to array of transactions
+ * @throws Error if HTTP request fails
+ */
+async function fetchMembers1stTransactionsChunk(
+  accountId: string,
+  accountKey: string,
+  productId: string,
+  productCode: string | undefined,
+  startDate: string,
+  endDate: string
+): Promise<Transaction[]> {
+  const base = process.env.MEMBERS1ST_TRANSACTIONS_URL_BASE ?? DEFAULT_TRANSACTIONS_URL_BASE;
+  const url = new URL(`${base.replace(/\/$/, "")}/${encodeURIComponent(accountKey)}/${encodeURIComponent(productId)}`);
+
+  // Calculate days for this chunk
+  const days = daysBetween(startDate, endDate);
+  
+  // Set query parameters with defaults for the simplified API
+  url.searchParams.set("billpayOnly", "false");
+  url.searchParams.set("days", String(days));
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
+  url.searchParams.set("advanced", "true");
+  url.searchParams.set("actionCode", "*");
+  url.searchParams.set("sourceCode", "*");
+
+  const origin = process.env.MEMBERS1ST_ORIGIN ?? DEFAULT_ORIGIN;
+  const referer = productCode
+    ? `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}&type=${encodeURIComponent(productCode)}`
+    : `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}`;
+
+  const headers = buildRequestHeaders({
+    Accept: "application/json, text/plain, */*",
+    Origin: origin,
+    Referer: referer
+  });
+
+  const res = await httpGet(url.toString(), headers, DEFAULT_MAX_REDIRECTS);
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    const text = res.body ?? "";
+    throw new Error(
+      `Members1st transactions fetch failed: ${res.statusCode} ${res.statusMessage}${text ? ` - ${text.slice(0, 300)}` : ""}`
+    );
+  }
+
+  const json = parseJson(res.body);
+  const items: any[] = extractArray(json, ["transactions", "items", "data"]);
+
+  return items.map((t, idx) => mapTransaction(t, accountId, idx));
+}
+
+/**
  * Fetches transactions for a specific account from the Members1st API.
+ * If the date range exceeds 180 days, the request is automatically chunked and responses are merged.
  * Account ID should be in the format "<accountKey>:<productId>".
  * @param accountId - The account ID (format: accountKey:productId)
  * @param opts - Optional filters for transaction search
+ * @param opts.startDate - Start date in YYYY-MM-DD format (defaults to 30 days ago)
+ * @param opts.endDate - End date in YYYY-MM-DD format (defaults to today)
  * @returns Promise resolving to array of transactions
  * @throws Error if accountKey/productId cannot be determined or HTTP request fails
  */
@@ -638,39 +735,32 @@ export async function fetchMembers1stTransactions(
     account?.members1st?.productCode ??
     (account?.type === "checking" ? "Draft" : account?.type === "savings" ? "Share" : undefined);
 
-  const base = process.env.MEMBERS1ST_TRANSACTIONS_URL_BASE ?? DEFAULT_TRANSACTIONS_URL_BASE;
-  const url = new URL(`${base.replace(/\/$/, "")}/${encodeURIComponent(accountKey)}/${encodeURIComponent(productId)}`);
-
   const search = normalizeTransactionSearchOptions(opts);
-  url.searchParams.set("billpayOnly", String(search.billpayOnly));
-  url.searchParams.set("days", String(search.days));
-  url.searchParams.set("startDate", search.startDate);
-  url.searchParams.set("endDate", search.endDate);
-  url.searchParams.set("advanced", String(search.advanced));
-  url.searchParams.set("actionCode", search.actionCode);
-  url.searchParams.set("sourceCode", search.sourceCode);
+  const chunks = chunkDateRange(search.startDate, search.endDate);
 
-  const origin = process.env.MEMBERS1ST_ORIGIN ?? DEFAULT_ORIGIN;
-  const referer = productCode
-    ? `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}&type=${encodeURIComponent(productCode)}`
-    : `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}`;
+  // Fetch all chunks in parallel
+  const chunkResults = await Promise.all(
+    chunks.map(chunk =>
+      fetchMembers1stTransactionsChunk(
+        accountId,
+        accountKey,
+        productId,
+        productCode,
+        chunk.startDate,
+        chunk.endDate
+      )
+    )
+  );
 
-  const headers = buildRequestHeaders({
-    Accept: "application/json, text/plain, */*",
-    Origin: origin,
-    Referer: referer
-  });
-
-  const res = await httpGet(url.toString(), headers, DEFAULT_MAX_REDIRECTS);
-  if (res.statusCode < 200 || res.statusCode >= 300) {
-    const text = res.body ?? "";
-    throw new Error(
-      `Members1st transactions fetch failed: ${res.statusCode} ${res.statusMessage}${text ? ` - ${text.slice(0, 300)}` : ""}`
-    );
+  // Merge all results and deduplicate by transaction id
+  const allTransactions = chunkResults.flat();
+  const uniqueTransactions = new Map<string, Transaction>();
+  
+  for (const txn of allTransactions) {
+    if (!uniqueTransactions.has(txn.id)) {
+      uniqueTransactions.set(txn.id, txn);
+    }
   }
 
-  const json = parseJson(res.body);
-  const items: any[] = extractArray(json, ["transactions", "items", "data"]);
-
-  return items.map((t, idx) => mapTransaction(t, accountId, idx));
+  return Array.from(uniqueTransactions.values());
 }
