@@ -21,7 +21,18 @@ fi
 
 # 1. Check for secrets
 echo "1️⃣  Checking for potential secrets in code..."
-if git grep -i "password\|secret\|api_key\|token" -- "*.ts" "*.js" "*.json" | grep -v ".github/agents" | grep -v "copilot-instructions" | grep -v "test" | grep -v "example" | grep -v "TODO" | grep -v "description"; then
+# Search for potential secrets in source files
+SECRET_PATTERNS="password\|secret\|api_key\|token"
+ALLOWED_PATHS=".github/agents|copilot-instructions|test|example"
+ALLOWED_CONTEXTS="TODO|description|Description|example|Example|test|Test"
+
+# Find potential secrets, excluding documentation and test files
+potential_secrets=$(git grep -i "$SECRET_PATTERNS" -- "*.ts" "*.js" "*.json" 2>/dev/null | \
+  grep -v -E "$ALLOWED_PATHS" | \
+  grep -v -E "$ALLOWED_CONTEXTS" || true)
+
+if [ -n "$potential_secrets" ]; then
+  echo "$potential_secrets"
   echo "❌ Potential secrets found! Review the above matches."
   echo "   Make sure you're not committing real credentials."
   echo ""

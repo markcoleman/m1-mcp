@@ -79,17 +79,21 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          # Find previous tag safely, handling edge cases
+          set +e  # Don't exit on error
+          PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null)
+          TAG_SEARCH_EXIT=$?
+          set -e  # Re-enable exit on error
+          
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          if [ $TAG_SEARCH_EXIT -ne 0 ] || [ -z "$PREVIOUS_TAG" ]; then
             echo "Initial release" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
           else
-            echo "changelog<<EOF" >> $GITHUB_OUTPUT
-            git log $PREVIOUS_TAG..${{ github.ref_name }} --pretty=format:"- %s (%h)" >> $GITHUB_OUTPUT
+            # Generate changelog from commits since previous tag
+            git log $PREVIOUS_TAG..${{ github.ref_name }} --pretty=format:"- %s (%h)" >> $GITHUB_OUTPUT || echo "No commits to list" >> $GITHUB_OUTPUT
             echo "" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
           fi
+          echo "EOF" >> $GITHUB_OUTPUT
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -152,7 +156,17 @@ jobs:
       - name: Check if package is private
         id: check-private
         run: |
-          PRIVATE=$(node -p "require('./package.json').private || false")
+          # Safely check if package is private, handling malformed JSON
+          set +e  # Don't exit on error
+          PRIVATE=$(node -p "try { require('./package.json').private || false } catch(e) { console.error('Error reading package.json:', e.message); 'true' }" 2>&1)
+          CHECK_EXIT=$?
+          set -e  # Re-enable exit on error
+          
+          if [ $CHECK_EXIT -ne 0 ]; then
+            echo "Warning: Could not read package.json, assuming private"
+            PRIVATE="true"
+          fi
+          
           echo "is_private=$PRIVATE" >> $GITHUB_OUTPUT
       
       - name: Publish to npm
