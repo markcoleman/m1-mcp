@@ -387,14 +387,21 @@ function normalizeTransactionSearchOptions(opts: TransactionSearchOptions): Norm
  * @returns Number of days between the dates
  */
 function daysBetween(startDate: string, endDate: string): number {
-  const start = parseIsoDateOnly(startDate) ?? new Date();
-  const end = parseIsoDateOnly(endDate) ?? new Date();
+  const start = parseIsoDateOnly(startDate);
+  const end = parseIsoDateOnly(endDate);
+  
+  // If either date is invalid, return a safe default
+  if (!start || !end) {
+    return DEFAULT_TRANSACTION_DAYS;
+  }
+  
   const diffMs = end.getTime() - start.getTime();
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
 
 /**
  * Chunks a date range into segments of at most MAX_TRANSACTION_DAYS days.
+ * Each chunk covers exactly MAX_TRANSACTION_DAYS days (inclusive) except the last chunk.
  * @param startDate - Start date in YYYY-MM-DD format
  * @param endDate - End date in YYYY-MM-DD format
  * @returns Array of date range chunks, each with startDate and endDate
@@ -407,20 +414,35 @@ function chunkDateRange(startDate: string, endDate: string): Array<{ startDate: 
   }
 
   const chunks: Array<{ startDate: string; endDate: string }> = [];
-  let currentStart = parseIsoDateOnly(startDate) ?? new Date();
-  const finalEnd = parseIsoDateOnly(endDate) ?? new Date();
+  const parsedStart = parseIsoDateOnly(startDate);
+  const parsedEnd = parseIsoDateOnly(endDate);
+  
+  // If dates are invalid, return a single chunk with the original dates
+  if (!parsedStart || !parsedEnd) {
+    return [{ startDate, endDate }];
+  }
+  
+  let currentStart = parsedStart;
+  const finalEnd = parsedEnd;
 
   while (currentStart <= finalEnd) {
+    // Calculate the end of this chunk (MAX_TRANSACTION_DAYS - 1 to make it inclusive)
+    // E.g., start on day 0, add 179 days = day 179, which is 180 days inclusive
     const chunkEnd = new Date(currentStart);
-    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + MAX_TRANSACTION_DAYS);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + MAX_TRANSACTION_DAYS - 1);
     
-    // Don't exceed the final end date
+    // The actual end is either the chunk end or the final end, whichever is earlier
     const actualEnd = chunkEnd > finalEnd ? finalEnd : chunkEnd;
     
     chunks.push({
       startDate: isoDateOnly(currentStart),
       endDate: isoDateOnly(actualEnd)
     });
+    
+    // If we've reached or passed the final end, we're done
+    if (actualEnd >= finalEnd) {
+      break;
+    }
     
     // Move to the next chunk (day after the end of this chunk)
     currentStart = new Date(actualEnd);
