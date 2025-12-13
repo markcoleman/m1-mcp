@@ -61,11 +61,13 @@ This project implements an MCP (Model Context Protocol) server that provides fin
         │ DATA_SOURCE=mock          │ DATA_SOURCE=members1st
         ▼                           ▼
 ┌───────────────────┐    ┌──────────────────────────────┐
-│  Mock Data        │    │     members1st.ts            │
+│  Mock Data        │    │     members1st/              │
 │  (in-memory)      │    │  (HTTP API Integration)      │
-│                   │    │  - fetchMembers1stAccounts() │
-│  - 3 accounts     │    │  - fetchMembers1stTransactions()
-│  - 5 transactions │    │  - HTTP client with caching  │
+│                   │    │  - client.ts (main API)      │
+│  - 3 accounts     │    │  - http.ts (requests)        │
+│  - 5 transactions │    │  - mappers.ts (transforms)   │
+│                   │    │  - logging.ts, headers.ts,   │
+│                   │    │    date-utils.ts (utilities) │
 └───────────────────┘    └──────────────────────────────┘
 ```
 
@@ -74,7 +76,14 @@ This project implements an MCP (Model Context Protocol) server that provides fin
 - **server.ts**: Core MCP server with stdio and HTTP transports
 - **tools.ts**: MCP tool definitions and request handlers
 - **data.ts**: Data layer abstraction supporting multiple backends
-- **members1st.ts**: Members1st API client with authentication and caching
+- **members1st/**: Members1st API client module with authentication and caching
+  - **client.ts**: Main API client with accounts and transactions fetching
+  - **http.ts**: HTTP client utilities with redirect handling
+  - **logging.ts**: API request/response logging with ANSI colors
+  - **headers.ts**: Header building, sanitization, and cookie handling
+  - **date-utils.ts**: Date parsing, formatting, and range chunking
+  - **mappers.ts**: Data transformation from API responses to domain types
+  - **index.ts**: Public API exports
 - **env.ts**: Environment variable loader using dotenv
 
 ### Data Flow

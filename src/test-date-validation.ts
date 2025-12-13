@@ -2,7 +2,7 @@ import "./env.js";
 
 import { createServer } from "node:http";
 
-import { fetchMembers1stAccounts, fetchMembers1stTransactions } from "./members1st.js";
+import { fetchMembers1stAccounts, fetchMembers1stTransactions } from "./members1st/index.js";
 
 /**
  * Test that verifies date validation works correctly.

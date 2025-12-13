@@ -1,7 +1,7 @@
 import "./env.js";
 
 import { createServer } from "node:http";
-import { fetchMembers1stAccounts } from "./members1st.js";
+import { fetchMembers1stAccounts } from "./members1st/index.js";
 
 async function main() {
   const expectedCookieHeader = "M1Online=abc123";
