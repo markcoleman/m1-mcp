@@ -89,13 +89,8 @@ async function main() {
   if (!acctId) throw new Error("No accounts returned");
 
   const txns = await fetchMembers1stTransactions(acctId, {
-    days: 30,
     startDate: "2025-11-13",
-    endDate: "2025-12-13",
-    billpayOnly: false,
-    advanced: true,
-    actionCode: "*",
-    sourceCode: "*"
+    endDate: "2025-12-13"
   });
 
   server.close();
@@ -120,7 +115,7 @@ async function main() {
 
   const expectedQuery: Record<string, string> = {
     billpayOnly: "false",
-    days: "30",
+    days: "30",  // Calculated internally from date range (2025-11-13 to 2025-12-13)
     startDate: "2025-11-13",
     endDate: "2025-12-13",
     advanced: "true",

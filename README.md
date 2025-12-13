@@ -91,8 +91,8 @@ This project implements an MCP (Model Context Protocol) server that provides fin
 - `get_account_details` → input `{ accountId: string }`, returns `{ account }` or `{ error }`
 - `get_account_transactions` → input:
   - required: `accountId: string`
-  - optional filters: `startDate`, `endDate` (YYYY-MM-DD), `days` (1–180), `billpayOnly`, `advanced`, `actionCode`, `sourceCode`
-  - limits: max 180 days per request; no paging
+  - optional filters: `startDate`, `endDate` (YYYY-MM-DD, defaults to last 30 days)
+  - note: Date ranges exceeding 180 days are automatically chunked and merged
 
 Note: tool results are returned as JSON encoded into MCP `text` content.
 
@@ -244,26 +244,23 @@ Input:
 
 ### `get_account_transactions`
 
-Minimal input:
+Minimal input (defaults to last 30 days):
 
 ```json
 { "accountId": "acct_001" }
 ```
 
-With filters:
+With date range:
 
 ```json
 {
   "accountId": "acct_001",
-  "days": 30,
   "startDate": "2025-11-13",
-  "endDate": "2025-12-13",
-  "billpayOnly": false,
-  "advanced": true,
-  "actionCode": "*",
-  "sourceCode": "*"
+  "endDate": "2025-12-13"
 }
 ```
+
+For date ranges exceeding 180 days, the request is automatically split into multiple chunks and results are merged.
 
 ## Data sources
 

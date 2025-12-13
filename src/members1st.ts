@@ -345,17 +345,9 @@ function buildRequestHeaders(base: Record<string, string>): Record<string, strin
 type TransactionSearchOptions = {
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
-  days?: number;
-  billpayOnly?: boolean;
-  advanced?: boolean;
-  actionCode?: string;
-  sourceCode?: string;
 };
 
-type NormalizedTransactionSearch = Required<
-  Pick<TransactionSearchOptions, "billpayOnly" | "advanced" | "actionCode" | "sourceCode">
-> & {
-  days: number;
+type NormalizedTransactionSearch = {
   startDate: string;
   endDate: string;
 };
@@ -373,27 +365,104 @@ function parseIsoDateOnly(s: string): Date | undefined {
 function normalizeTransactionSearchOptions(opts: TransactionSearchOptions): NormalizedTransactionSearch {
   const endDate = opts.endDate ?? isoDateOnly(new Date());
 
-  const daysRaw = typeof opts.days === "number" && Number.isFinite(opts.days) ? opts.days : DEFAULT_TRANSACTION_DAYS;
-  const days = Math.max(1, Math.min(MAX_TRANSACTION_DAYS, Math.trunc(daysRaw)));
-
   const startDate =
     opts.startDate ??
     (() => {
       const end = parseIsoDateOnly(endDate) ?? new Date();
       const d = new Date(end);
-      d.setUTCDate(d.getUTCDate() - days);
+      d.setUTCDate(d.getUTCDate() - DEFAULT_TRANSACTION_DAYS);
       return isoDateOnly(d);
     })();
 
   return {
     startDate,
-    endDate,
-    days,
-    billpayOnly: opts.billpayOnly ?? false,
-    advanced: opts.advanced ?? true,
-    actionCode: opts.actionCode ?? "*",
-    sourceCode: opts.sourceCode ?? "*"
+    endDate
   };
+}
+
+/**
+ * Calculates the number of days between two dates using UTC date arithmetic.
+ * This avoids issues with daylight saving time transitions.
+ * @param startDate - Start date in YYYY-MM-DD format
+ * @param endDate - End date in YYYY-MM-DD format
+ * @returns Number of days between the dates (positive if endDate >= startDate)
+ */
+function daysBetween(startDate: string, endDate: string): number {
+  const start = parseIsoDateOnly(startDate);
+  const end = parseIsoDateOnly(endDate);
+  
+  // If either date is invalid, return a safe default
+  if (!start || !end) {
+    return DEFAULT_TRANSACTION_DAYS;
+  }
+  
+  // Use UTC date parts to avoid DST issues
+  const startUtc = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const endUtc = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+  
+  const diffMs = endUtc - startUtc;
+  
+  // If start is after end, return 0 (invalid range)
+  if (diffMs < 0) {
+    return 0;
+  }
+  
+  // Calculate days (milliseconds / ms per day)
+  // Use Math.floor since we're dealing with whole UTC days
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Chunks a date range into segments of at most MAX_TRANSACTION_DAYS days.
+ * Each chunk covers exactly MAX_TRANSACTION_DAYS days (inclusive) except the last chunk.
+ * @param startDate - Start date in YYYY-MM-DD format
+ * @param endDate - End date in YYYY-MM-DD format
+ * @returns Array of date range chunks, each with startDate and endDate
+ */
+function chunkDateRange(startDate: string, endDate: string): Array<{ startDate: string; endDate: string }> {
+  const totalDays = daysBetween(startDate, endDate);
+  
+  if (totalDays <= MAX_TRANSACTION_DAYS) {
+    return [{ startDate, endDate }];
+  }
+
+  const chunks: Array<{ startDate: string; endDate: string }> = [];
+  const parsedStart = parseIsoDateOnly(startDate);
+  const parsedEnd = parseIsoDateOnly(endDate);
+  
+  // If dates are invalid, return a single chunk with the original dates
+  if (!parsedStart || !parsedEnd) {
+    return [{ startDate, endDate }];
+  }
+  
+  let currentStart = parsedStart;
+  const finalEnd = parsedEnd;
+
+  while (currentStart <= finalEnd) {
+    // Calculate the end of this chunk (MAX_TRANSACTION_DAYS - 1 to make it inclusive)
+    // E.g., start on day 0, add 179 days = day 179, which is 180 days inclusive
+    const chunkEnd = new Date(currentStart);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + MAX_TRANSACTION_DAYS - 1);
+    
+    // The actual end is either the chunk end or the final end, whichever is earlier
+    const actualEnd = chunkEnd > finalEnd ? finalEnd : chunkEnd;
+    
+    chunks.push({
+      startDate: isoDateOnly(currentStart),
+      endDate: isoDateOnly(actualEnd)
+    });
+    
+    // If we've reached or passed the final end, we're done
+    if (actualEnd >= finalEnd) {
+      break;
+    }
+    
+    // Move to the next chunk (day after the end of this chunk)
+    currentStart = new Date(actualEnd);
+    currentStart.setUTCDate(currentStart.getUTCDate() + 1);
+  }
+
+  return chunks;
 }
 
 function toIsoDateOnly(v: unknown): string {
@@ -607,10 +676,73 @@ export async function fetchMembers1stAccounts(): Promise<Account[]> {
 }
 
 /**
+ * Fetches transactions for a single date range chunk from the Members1st API.
+ * This is an internal helper that fetches at most 180 days of transactions.
+ * @param accountId - The account ID (format: accountKey:productId)
+ * @param accountKey - Account key from Members1st system
+ * @param productId - Product ID from Members1st system
+ * @param productCode - Product code (Draft, Share, etc.)
+ * @param startDate - Start date in YYYY-MM-DD format
+ * @param endDate - End date in YYYY-MM-DD format
+ * @returns Promise resolving to array of transactions
+ * @throws Error if HTTP request fails
+ */
+async function fetchMembers1stTransactionsChunk(
+  accountId: string,
+  accountKey: string,
+  productId: string,
+  productCode: string | undefined,
+  startDate: string,
+  endDate: string
+): Promise<Transaction[]> {
+  const base = process.env.MEMBERS1ST_TRANSACTIONS_URL_BASE ?? DEFAULT_TRANSACTIONS_URL_BASE;
+  const url = new URL(`${base.replace(/\/$/, "")}/${encodeURIComponent(accountKey)}/${encodeURIComponent(productId)}`);
+
+  // Calculate days for this chunk
+  const days = daysBetween(startDate, endDate);
+  
+  // Set query parameters with defaults for the simplified API
+  url.searchParams.set("billpayOnly", "false");
+  url.searchParams.set("days", String(days));
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
+  url.searchParams.set("advanced", "true");
+  url.searchParams.set("actionCode", "*");
+  url.searchParams.set("sourceCode", "*");
+
+  const origin = process.env.MEMBERS1ST_ORIGIN ?? DEFAULT_ORIGIN;
+  const referer = productCode
+    ? `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}&type=${encodeURIComponent(productCode)}`
+    : `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}`;
+
+  const headers = buildRequestHeaders({
+    Accept: "application/json, text/plain, */*",
+    Origin: origin,
+    Referer: referer
+  });
+
+  const res = await httpGet(url.toString(), headers, DEFAULT_MAX_REDIRECTS);
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    const text = res.body ?? "";
+    throw new Error(
+      `Members1st transactions fetch failed: ${res.statusCode} ${res.statusMessage}${text ? ` - ${text.slice(0, 300)}` : ""}`
+    );
+  }
+
+  const json = parseJson(res.body);
+  const items: any[] = extractArray(json, ["transactions", "items", "data"]);
+
+  return items.map((t, idx) => mapTransaction(t, accountId, idx));
+}
+
+/**
  * Fetches transactions for a specific account from the Members1st API.
+ * If the date range exceeds 180 days, the request is automatically chunked and responses are merged.
  * Account ID should be in the format "<accountKey>:<productId>".
  * @param accountId - The account ID (format: accountKey:productId)
  * @param opts - Optional filters for transaction search
+ * @param opts.startDate - Start date in YYYY-MM-DD format (defaults to 30 days ago)
+ * @param opts.endDate - End date in YYYY-MM-DD format (defaults to today)
  * @returns Promise resolving to array of transactions
  * @throws Error if accountKey/productId cannot be determined or HTTP request fails
  */
@@ -638,39 +770,49 @@ export async function fetchMembers1stTransactions(
     account?.members1st?.productCode ??
     (account?.type === "checking" ? "Draft" : account?.type === "savings" ? "Share" : undefined);
 
-  const base = process.env.MEMBERS1ST_TRANSACTIONS_URL_BASE ?? DEFAULT_TRANSACTIONS_URL_BASE;
-  const url = new URL(`${base.replace(/\/$/, "")}/${encodeURIComponent(accountKey)}/${encodeURIComponent(productId)}`);
-
   const search = normalizeTransactionSearchOptions(opts);
-  url.searchParams.set("billpayOnly", String(search.billpayOnly));
-  url.searchParams.set("days", String(search.days));
-  url.searchParams.set("startDate", search.startDate);
-  url.searchParams.set("endDate", search.endDate);
-  url.searchParams.set("advanced", String(search.advanced));
-  url.searchParams.set("actionCode", search.actionCode);
-  url.searchParams.set("sourceCode", search.sourceCode);
-
-  const origin = process.env.MEMBERS1ST_ORIGIN ?? DEFAULT_ORIGIN;
-  const referer = productCode
-    ? `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}&type=${encodeURIComponent(productCode)}`
-    : `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}`;
-
-  const headers = buildRequestHeaders({
-    Accept: "application/json, text/plain, */*",
-    Origin: origin,
-    Referer: referer
-  });
-
-  const res = await httpGet(url.toString(), headers, DEFAULT_MAX_REDIRECTS);
-  if (res.statusCode < 200 || res.statusCode >= 300) {
-    const text = res.body ?? "";
+  
+  // Validate date range before chunking
+  const parsedStart = parseIsoDateOnly(search.startDate);
+  const parsedEnd = parseIsoDateOnly(search.endDate);
+  
+  if (!parsedStart || !parsedEnd) {
     throw new Error(
-      `Members1st transactions fetch failed: ${res.statusCode} ${res.statusMessage}${text ? ` - ${text.slice(0, 300)}` : ""}`
+      `Members1st transactions fetch failed: invalid date format. startDate: ${search.startDate}, endDate: ${search.endDate}`
     );
   }
+  
+  if (parsedStart > parsedEnd) {
+    throw new Error(
+      `Members1st transactions fetch failed: startDate must be before or equal to endDate. startDate: ${search.startDate}, endDate: ${search.endDate}`
+    );
+  }
+  
+  const chunks = chunkDateRange(search.startDate, search.endDate);
 
-  const json = parseJson(res.body);
-  const items: any[] = extractArray(json, ["transactions", "items", "data"]);
+  // Fetch all chunks in parallel
+  const chunkResults = await Promise.all(
+    chunks.map(chunk =>
+      fetchMembers1stTransactionsChunk(
+        accountId,
+        accountKey,
+        productId,
+        productCode,
+        chunk.startDate,
+        chunk.endDate
+      )
+    )
+  );
 
-  return items.map((t, idx) => mapTransaction(t, accountId, idx));
+  // Merge all results and deduplicate by transaction id
+  const allTransactions = chunkResults.flat();
+  const uniqueTransactions = new Map<string, Transaction>();
+  
+  for (const txn of allTransactions) {
+    if (!uniqueTransactions.has(txn.id)) {
+      uniqueTransactions.set(txn.id, txn);
+    }
+  }
+
+  return Array.from(uniqueTransactions.values());
 }
