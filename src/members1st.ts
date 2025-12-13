@@ -408,7 +408,8 @@ function daysBetween(startDate: string, endDate: string): number {
   }
   
   // Calculate days (milliseconds / ms per day)
-  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+  // Use Math.floor since we're dealing with whole UTC days
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 /**
