@@ -4,22 +4,40 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { URL } from "node:url";
 
+/** Default Members1st accounts API endpoint */
 const DEFAULT_ACCOUNTS_URL = "https://myonline.members1st.org/api/v1/account";
+/** Default Members1st transactions API endpoint base */
 const DEFAULT_TRANSACTIONS_URL_BASE = "https://myonline.members1st.org/api/v1/Transactions";
+/** Default origin for Members1st requests */
 const DEFAULT_ORIGIN = "https://myonline.members1st.org";
 
+/** Default cache TTL for accounts data (30 seconds) */
 const DEFAULT_ACCOUNTS_CACHE_TTL_MS = 30_000;
+/** Default number of days to retrieve transactions */
 const DEFAULT_TRANSACTION_DAYS = 30;
-// Members 1st transactions endpoint supports up to 180 days per call and does not support paging.
+/** Maximum number of days supported by Members1st API (no paging available) */
 const MAX_TRANSACTION_DAYS = 180;
+/** Maximum number of HTTP redirects to follow */
 const DEFAULT_MAX_REDIRECTS = 5;
 
+/**
+ * Parses an environment variable as a boolean.
+ * Accepts "1" or "true" (case-insensitive) as true values.
+ * @param name - Environment variable name
+ * @returns true if the value is "1" or "true", false otherwise
+ */
 function envBool(name: string): boolean {
   const v = process.env[name];
   if (!v) return false;
   return v === "1" || v.toLowerCase() === "true";
 }
 
+/**
+ * Parses an environment variable as a number with a fallback.
+ * @param name - Environment variable name
+ * @param fallback - Default value if variable is not set or invalid
+ * @returns Parsed number or fallback value
+ */
 function envNumber(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -53,11 +71,26 @@ function extractArray(json: any, preferredKeys: string[]): any[] {
   return [];
 }
 
+/**
+ * Sanitizes HTTP header values to prevent header injection attacks.
+ * Removes newline characters and trims whitespace.
+ * @param value - Raw header value
+ * @returns Sanitized header value
+ */
 function sanitizeHeaderValue(value: string): string {
   // Prevent invalid header characters; avoid header injection.
   return value.replace(/[\r\n]+/g, " ").trim();
 }
 
+/**
+ * Builds a properly formatted Cookie header for Members1st requests.
+ * Handles three formats:
+ * 1. Full cookie header already containing M1Online (returned as-is)
+ * 2. Just the cookie value (wrapped with M1Online=)
+ * 3. Complete cookie string with multiple cookies (returned as-is)
+ * @param raw - Raw cookie value or header from environment
+ * @returns Properly formatted Cookie header value
+ */
 function buildCookieHeader(raw: string): string {
   const sanitized = sanitizeHeaderValue(raw);
   // If caller already provided a full Cookie header value that includes M1Online, keep it.
@@ -135,6 +168,11 @@ function httpGetOnce(url: URL, headers: Record<string, string>): Promise<HttpRes
   });
 }
 
+/**
+ * Parses additional headers from MEMBERS1ST_HEADERS_JSON environment variable.
+ * Expected format: JSON object with string keys and values.
+ * @returns Object containing parsed headers, or empty object if invalid/missing
+ */
 function parseAdditionalHeaders(): Record<string, string> {
   const raw = process.env.MEMBERS1ST_HEADERS_JSON;
   if (!raw) return {};
@@ -152,6 +190,12 @@ function parseAdditionalHeaders(): Record<string, string> {
   }
 }
 
+/**
+ * Builds request headers for Members1st API calls.
+ * Combines base headers with additional headers, cookie, and authorization.
+ * @param base - Base headers to include
+ * @returns Complete set of request headers
+ */
 function buildRequestHeaders(base: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
     ...base,
@@ -396,6 +440,12 @@ function mapMembers1stAccountDetails(details: any, detailsIndex: number): Accoun
   return products.map((p, idx) => mapMembers1stProduct(details, p, parentKey, idx));
 }
 
+/**
+ * Fetches all accounts from the Members1st API.
+ * Results are cached for MEMBERS1ST_CACHE_TTL_MS milliseconds (default 30s).
+ * @returns Promise resolving to array of accounts
+ * @throws Error if the HTTP request fails or returns non-2xx status
+ */
 export async function fetchMembers1stAccounts(): Promise<Account[]> {
   const ttlMs = envNumber("MEMBERS1ST_CACHE_TTL_MS", DEFAULT_ACCOUNTS_CACHE_TTL_MS);
   const now = Date.now();
@@ -425,6 +475,14 @@ export async function fetchMembers1stAccounts(): Promise<Account[]> {
   return mapped;
 }
 
+/**
+ * Fetches transactions for a specific account from the Members1st API.
+ * Account ID should be in the format "<accountKey>:<productId>".
+ * @param accountId - The account ID (format: accountKey:productId)
+ * @param opts - Optional filters for transaction search
+ * @returns Promise resolving to array of transactions
+ * @throws Error if accountKey/productId cannot be determined or HTTP request fails
+ */
 export async function fetchMembers1stTransactions(
   accountId: string,
   opts: TransactionSearchOptions = {}

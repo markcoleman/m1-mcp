@@ -2,7 +2,88 @@
 
 Minimal Node.js (TypeScript) MCP server that exposes three tools for account data.
 
-By default it serves a small in-memory mock dataset. You can optionally switch to a “Members 1st” HTTP-backed data source via environment variables.
+By default it serves a small in-memory mock dataset. You can optionally switch to a "Members 1st" HTTP-backed data source via environment variables.
+
+
+**New to m1-mcp?** See [QUICKSTART.md](QUICKSTART.md) for a 5-minute getting started guide!
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Tools](#tools)
+- [Prerequisites](#prereqs)
+- [Installation](#install)
+- [Configuration](#environment-env)
+- [Usage](#scripts)
+- [Running](#run-stdio)
+- [Testing](#quick-local-verification-no-mcp-client)
+- [Client Configuration](#example-mcp-client-config)
+- [Tool Examples](#tool-io-examples)
+- [Data Sources](#data-sources)
+- [Contributing](#contributing)
+
+## Architecture
+
+This project implements an MCP (Model Context Protocol) server that provides financial account data through a clean abstraction layer:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MCP Client                           │
+│              (Claude, Cline, etc.)                      │
+└────────────────────┬────────────────────────────────────┘
+                     │ MCP Protocol
+                     │ (stdio or HTTP)
+┌────────────────────▼────────────────────────────────────┐
+│                  server.ts                              │
+│         (MCP Server Implementation)                     │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  Tool Request Handler                            │   │
+│  │  - ListToolsRequest                              │   │
+│  │  - CallToolRequest                               │   │
+│  └────────────────┬─────────────────────────────────┘   │
+└───────────────────┼─────────────────────────────────────┘
+                    │
+┌───────────────────▼─────────────────────────────────────┐
+│                  tools.ts                               │
+│            (Tool Handlers & Schemas)                    │
+│  - handleGetAllAccounts()                               │
+│  - handleGetAccountDetails(accountId)                   │
+│  - handleGetAccountTransactions(accountId, opts)        │
+└────────────────────┬────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────┐
+│                  data.ts                                │
+│           (Data Abstraction Layer)                      │
+│  - getAllAccounts()                                     │
+│  - getAccountById(id)                                   │
+│  - getTransactionsForAccount(id, opts)                  │
+└───────┬───────────────────────────┬────────────────────┘
+        │                           │
+        │ DATA_SOURCE=mock          │ DATA_SOURCE=members1st
+        ▼                           ▼
+┌───────────────────┐    ┌──────────────────────────────┐
+│  Mock Data        │    │     members1st.ts            │
+│  (in-memory)      │    │  (HTTP API Integration)      │
+│                   │    │  - fetchMembers1stAccounts() │
+│  - 3 accounts     │    │  - fetchMembers1stTransactions()
+│  - 5 transactions │    │  - HTTP client with caching  │
+└───────────────────┘    └──────────────────────────────┘
+```
+
+### Key Components
+
+- **server.ts**: Core MCP server with stdio and HTTP transports
+- **tools.ts**: MCP tool definitions and request handlers
+- **data.ts**: Data layer abstraction supporting multiple backends
+- **members1st.ts**: Members1st API client with authentication and caching
+- **env.ts**: Environment variable loader using dotenv
+
+### Data Flow
+
+1. MCP client sends tool request (e.g., `get_all_accounts`)
+2. Server validates and routes to appropriate handler
+3. Handler calls data layer function
+4. Data layer checks `DATA_SOURCE` and routes to mock or Members1st
+5. Response flows back through layers to client as JSON
 
 ## Tools
 
@@ -223,3 +304,15 @@ export MEMBERS1ST_COOKIE='your_cookie_or_cookie_header_here'
 
 npm run dev:http
 ```
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
+
+- Development setup and workflow
+- Project structure and architecture
+- Testing requirements
+- Code style and best practices
+- How to submit pull requests
+
+For bug reports and feature requests, please open an issue on GitHub.

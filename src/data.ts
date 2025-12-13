@@ -1,22 +1,43 @@
+/**
+ * Represents a financial account (checking, savings, or credit).
+ */
 export type Account = {
+  /** Unique identifier for the account */
   id: string;
+  /** Display name of the account */
   name: string;
+  /** Type of account */
   type: "checking" | "savings" | "credit";
+  /** Currency code (e.g., "USD") */
   currency: string;
+  /** Current account balance */
   balance: number;
+  /** Members1st-specific metadata (optional) */
   members1st?: {
+    /** Account key in Members1st system */
     accountKey: string;
+    /** Product ID in Members1st system */
     productId: string;
+    /** Product code in Members1st system */
     productCode?: string;
   };
 };
 
+/**
+ * Represents a financial transaction.
+ */
 export type Transaction = {
+  /** Unique identifier for the transaction */
   id: string;
+  /** Account ID this transaction belongs to */
   accountId: string;
-  postedAt: string; // ISO date
+  /** Date the transaction was posted (ISO date format) */
+  postedAt: string;
+  /** Description or memo of the transaction */
   description: string;
-  amount: number; // negative = debit, positive = credit
+  /** Transaction amount (negative = debit, positive = credit) */
+  amount: number;
+  /** Currency code (e.g., "USD") */
   currency: string;
 };
 
@@ -89,10 +110,18 @@ const transactions: Transaction[] = [
   }
 ];
 
+/**
+ * Returns the configured data source from environment.
+ * @returns "mock" or "members1st"
+ */
 function dataSource(): string {
   return (process.env.DATA_SOURCE ?? "mock").toLowerCase();
 }
 
+/**
+ * Retrieves all accounts from the configured data source.
+ * @returns Promise resolving to array of all accounts
+ */
 export async function getAllAccounts(): Promise<Account[]> {
   if (dataSource() === "members1st") {
     return fetchMembers1stAccounts();
@@ -100,11 +129,29 @@ export async function getAllAccounts(): Promise<Account[]> {
   return accounts.slice();
 }
 
+/**
+ * Retrieves a specific account by its ID.
+ * @param accountId - The unique identifier of the account
+ * @returns Promise resolving to the account if found, undefined otherwise
+ */
 export async function getAccountById(accountId: string): Promise<Account | undefined> {
   const all = await getAllAccounts();
   return all.find((a) => a.id === accountId);
 }
 
+/**
+ * Retrieves transactions for a specific account with optional filtering.
+ * @param accountId - The unique identifier of the account
+ * @param opts - Optional filters for transactions
+ * @param opts.startDate - Start date in YYYY-MM-DD format
+ * @param opts.endDate - End date in YYYY-MM-DD format
+ * @param opts.days - Number of days to retrieve (1-180)
+ * @param opts.billpayOnly - Filter to bill pay transactions only
+ * @param opts.advanced - Enable advanced search (Members1st)
+ * @param opts.actionCode - Action code filter (Members1st)
+ * @param opts.sourceCode - Source code filter (Members1st)
+ * @returns Promise resolving to array of transactions
+ */
 export async function getTransactionsForAccount(
   accountId: string,
   opts?: {
