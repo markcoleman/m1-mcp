@@ -27,17 +27,7 @@ const Colors = {
   BgWhite: "\x1b[47m",
 } as const;
 
-/**
- * Parses an environment variable as a boolean.
- * Accepts "1" or "true" (case-insensitive) as true values.
- * @param name - Environment variable name
- * @returns true if the value is "1" or "true", false otherwise
- */
-function envBool(name: string): boolean {
-  const v = process.env[name];
-  if (!v) return false;
-  return v === "1" || v.toLowerCase() === "true";
-}
+import { envBool } from "./utils.js";
 
 /**
  * Checks if API request logging is enabled.

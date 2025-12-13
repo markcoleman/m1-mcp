@@ -9,6 +9,7 @@ import {
   type TransactionSearchOptions 
 } from "./date-utils.js";
 import { mapMembers1stAccountDetails, mapTransaction } from "./mappers.js";
+import { envBool, envNumber } from "./utils.js";
 
 /** Default Members1st accounts API endpoint */
 const DEFAULT_ACCOUNTS_URL = "https://myonline.members1st.org/api/v1/account";
@@ -28,31 +29,6 @@ type Cached<T> = {
 };
 
 let accountsCache: Cached<Account[]> | undefined;
-
-/**
- * Parses an environment variable as a boolean.
- * Accepts "1" or "true" (case-insensitive) as true values.
- * @param name - Environment variable name
- * @returns true if the value is "1" or "true", false otherwise
- */
-function envBool(name: string): boolean {
-  const v = process.env[name];
-  if (!v) return false;
-  return v === "1" || v.toLowerCase() === "true";
-}
-
-/**
- * Parses an environment variable as a number with a fallback.
- * @param name - Environment variable name
- * @param fallback - Default value if variable is not set or invalid
- * @returns Parsed number or fallback value
- */
-function envNumber(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
 
 /**
  * Fetches all accounts from the Members1st API.
