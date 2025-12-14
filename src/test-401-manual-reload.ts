@@ -1,8 +1,9 @@
 import "./env.js";
 
 import { createServer } from "node:http";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { fetchMembers1stAccounts } from "./members1st/index.js";
 
 async function main() {
@@ -12,9 +13,8 @@ async function main() {
   console.log("2. User manually updates the cookie file");
   console.log("3. System automatically retries with the new cookie → succeeds\n");
 
-  // Create a temporary directory for the cookie file
-  const testDir = "/tmp/m1-mcp-401-manual-test";
-  mkdirSync(testDir, { recursive: true });
+  // Create a secure temporary directory for the cookie file
+  const testDir = mkdtempSync(join(tmpdir(), "m1-mcp-401-manual-test-"));
   const cookieFile = join(testDir, ".cookie");
 
   // Write initial (invalid) cookie
@@ -118,6 +118,12 @@ async function main() {
     process.exit(1);
   } finally {
     server.close();
+    // Clean up temporary directory
+    try {
+      rmSync(testDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 }
 
