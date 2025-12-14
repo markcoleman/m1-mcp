@@ -1,10 +1,14 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import {
   sanitizeHeaderValue,
   buildCookieHeader,
   parseAdditionalHeaders,
-  buildRequestHeaders
+  buildRequestHeaders,
+  readCookieFromFile,
+  getCookieValue
 } from "./headers.js";
 
 describe("headers", () => {
@@ -134,14 +138,110 @@ describe("headers", () => {
     });
   });
 
-  describe("buildRequestHeaders", () => {
+  describe("readCookieFromFile", () => {
+    const testDir = join("/tmp", "m1-mcp-test-cookies");
+
+    beforeEach(() => {
+      // Clean up test directory
+      try {
+        rmSync(testDir, { recursive: true, force: true });
+      } catch {
+        // Ignore errors
+      }
+      mkdirSync(testDir, { recursive: true });
+    });
+
+    it("reads cookie from file", () => {
+      const cookieFile = join(testDir, "test.cookie");
+      writeFileSync(cookieFile, "test-cookie-value");
+      assert.equal(readCookieFromFile(cookieFile), "test-cookie-value");
+    });
+
+    it("trims whitespace from file content", () => {
+      const cookieFile = join(testDir, "test-trim.cookie");
+      writeFileSync(cookieFile, "  test-cookie-value  \n");
+      assert.equal(readCookieFromFile(cookieFile), "test-cookie-value");
+    });
+
+    it("returns undefined for non-existent file", () => {
+      assert.equal(readCookieFromFile(join(testDir, "nonexistent.cookie")), undefined);
+    });
+
+    it("resolves relative paths", () => {
+      const cookieFile = join(testDir, "relative.cookie");
+      writeFileSync(cookieFile, "relative-value");
+      // Test that relative path resolution doesn't throw
+      const result = readCookieFromFile(cookieFile);
+      assert.equal(result, "relative-value");
+    });
+  });
+
+  describe("getCookieValue", () => {
     const originalEnv = process.env;
+    const testDir = join("/tmp", "m1-mcp-test-cookies");
 
     beforeEach(() => {
       process.env = { ...originalEnv };
       delete process.env.MEMBERS1ST_COOKIE;
+      delete process.env.MEMBERS1ST_COOKIE_FILE;
+      
+      // Clean up test directory
+      try {
+        rmSync(testDir, { recursive: true, force: true });
+      } catch {
+        // Ignore errors
+      }
+      mkdirSync(testDir, { recursive: true });
+    });
+
+    it("returns cookie from MEMBERS1ST_COOKIE when set", () => {
+      process.env.MEMBERS1ST_COOKIE = "direct-cookie";
+      assert.equal(getCookieValue(), "direct-cookie");
+    });
+
+    it("returns cookie from file when MEMBERS1ST_COOKIE_FILE is set", () => {
+      const cookieFile = join(testDir, "test.cookie");
+      writeFileSync(cookieFile, "file-cookie");
+      process.env.MEMBERS1ST_COOKIE_FILE = cookieFile;
+      assert.equal(getCookieValue(), "file-cookie");
+    });
+
+    it("prefers MEMBERS1ST_COOKIE over MEMBERS1ST_COOKIE_FILE", () => {
+      const cookieFile = join(testDir, "test.cookie");
+      writeFileSync(cookieFile, "file-cookie");
+      process.env.MEMBERS1ST_COOKIE = "direct-cookie";
+      process.env.MEMBERS1ST_COOKIE_FILE = cookieFile;
+      assert.equal(getCookieValue(), "direct-cookie");
+    });
+
+    it("returns undefined when neither is set", () => {
+      assert.equal(getCookieValue(), undefined);
+    });
+
+    it("returns undefined when file does not exist", () => {
+      process.env.MEMBERS1ST_COOKIE_FILE = join(testDir, "nonexistent.cookie");
+      assert.equal(getCookieValue(), undefined);
+    });
+  });
+
+  describe("buildRequestHeaders", () => {
+    const originalEnv = process.env;
+    const testDir = join("/tmp", "m1-mcp-test-cookies");
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+      delete process.env.MEMBERS1ST_COOKIE;
+      delete process.env.MEMBERS1ST_COOKIE_FILE;
       delete process.env.MEMBERS1ST_AUTHORIZATION;
       delete process.env.MEMBERS1ST_HEADERS_JSON;
+      
+      // Clean up test directory
+      try {
+        rmSync(testDir, { recursive: true, force: true });
+      } catch {
+        // Ignore errors
+      }
+      mkdirSync(testDir, { recursive: true });
     });
 
     it("includes base headers", () => {
@@ -153,6 +253,14 @@ describe("headers", () => {
       process.env.MEMBERS1ST_COOKIE = "abc123";
       const result = buildRequestHeaders({});
       assert.equal(result.Cookie, "M1Online=abc123");
+    });
+
+    it("adds cookie header when MEMBERS1ST_COOKIE_FILE is set", () => {
+      const cookieFile = join(testDir, "test.cookie");
+      writeFileSync(cookieFile, "file-cookie-value");
+      process.env.MEMBERS1ST_COOKIE_FILE = cookieFile;
+      const result = buildRequestHeaders({});
+      assert.equal(result.Cookie, "M1Online=file-cookie-value");
     });
 
     it("adds authorization header when MEMBERS1ST_AUTHORIZATION is set", () => {

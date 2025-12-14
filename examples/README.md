@@ -104,7 +104,9 @@ DATA_SOURCE=mock
 
 ### Members1st Integration
 
-For Members1st integration, configure your `.env` file:
+For Members1st integration, you have two options for providing the authentication cookie:
+
+#### Option 1: Cookie in .env file (simple)
 
 ```bash
 # Use Members1st API
@@ -113,20 +115,45 @@ DATA_SOURCE=members1st
 # Members1st credentials (required)
 MEMBERS1ST_COOKIE=your_cookie_value_here
 
+# Optional: Additional headers (JSON format)
+# MEMBERS1ST_HEADERS_JSON={"NCSRF":"your_value","X-Akamai-Client-Type":"Web"}
+```
+
+#### Option 2: Cookie in separate file (recommended)
+
+Create a file named `.members1st-cookie` containing just the cookie value:
+
+```bash
+echo "your_cookie_value_here" > .members1st-cookie
+```
+
+Then configure your `.env` file:
+
+```bash
+# Use Members1st API
+DATA_SOURCE=members1st
+
+# Read cookie from file (more secure and convenient)
+MEMBERS1ST_COOKIE_FILE=.members1st-cookie
+
+# Optional: Additional headers (JSON format)
+# MEMBERS1ST_HEADERS_JSON={"NCSRF":"your_value","X-Akamai-Client-Type":"Web"}
+```
+
+#### Additional Configuration
+
+```bash
 # Optional: Custom endpoints
 # MEMBERS1ST_ACCOUNTS_URL=https://myonline.members1st.org/api/v1/account
 # MEMBERS1ST_TRANSACTIONS_URL_BASE=https://myonline.members1st.org/api/v1/Transactions
 # MEMBERS1ST_ORIGIN=https://myonline.members1st.org
-
-# Optional: Additional headers (JSON format)
-# MEMBERS1ST_HEADERS_JSON={"NCSRF":"your_value","X-Akamai-Client-Type":"Web"}
 
 # Optional: Cache configuration
 # MEMBERS1ST_CACHE_TTL_MS=30000
 # MEMBERS1ST_DISABLE_CACHE=false
 ```
 
-**Security Note**: Never commit your `.env` file with real credentials. The `.env` file is gitignored for this reason.
+**Security Note**: Never commit your `.env` file or `.members1st-cookie` file with real credentials. Both are gitignored for this reason.
 
 ## Direct Tool Testing
 

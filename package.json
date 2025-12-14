@@ -12,6 +12,7 @@
     "dev:http": "MCP_TRANSPORT=http tsx src/server.ts",
     "get:account": "tsx src/run-get-account.ts",
     "test:members1st-cookie": "tsx src/test-members1st-cookie.ts",
+    "test:cookie-file": "tsx src/test-cookie-file.ts",
     "test:members1st-transactions": "tsx src/test-members1st-transactions.ts",
     "test:unit": "DATA_SOURCE=mock node --test --experimental-test-coverage dist/**/*.test.js",
     "test:unit:dev": "DATA_SOURCE=mock tsx --test src/**/*.test.ts",

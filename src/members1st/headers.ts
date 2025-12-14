@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 /**
  * Sanitizes HTTP header values to prevent header injection attacks.
  * Removes newline characters and trims whitespace.
@@ -29,6 +32,40 @@ export function buildCookieHeader(raw: string): string {
 
   // Otherwise, assume they provided a complete cookie string (maybe multiple cookies).
   return sanitized;
+}
+
+/**
+ * Reads cookie value from a file.
+ * @param filePath - Path to file containing cookie value
+ * @returns Cookie value from file, or undefined if file cannot be read
+ */
+export function readCookieFromFile(filePath: string): string | undefined {
+  try {
+    const absolutePath = resolve(filePath);
+    const content = readFileSync(absolutePath, "utf-8");
+    return content.trim();
+  } catch {
+    // Silent failure is intentional - file not existing is expected when env var isn't set
+    // or user hasn't created the file yet. Caller will handle undefined gracefully.
+    return undefined;
+  }
+}
+
+/**
+ * Gets the cookie value from environment variable or file.
+ * Checks MEMBERS1ST_COOKIE first, then falls back to MEMBERS1ST_COOKIE_FILE.
+ * @returns Cookie value or undefined if not found
+ */
+export function getCookieValue(): string | undefined {
+  // First, check direct env var
+  const directCookie = process.env.MEMBERS1ST_COOKIE;
+  if (directCookie) return directCookie;
+
+  // Fall back to file path
+  const cookieFilePath = process.env.MEMBERS1ST_COOKIE_FILE;
+  if (cookieFilePath) return readCookieFromFile(cookieFilePath);
+
+  return undefined;
 }
 
 /**
@@ -65,7 +102,7 @@ export function buildRequestHeaders(base: Record<string, string>): Record<string
     ...parseAdditionalHeaders()
   };
 
-  const cookie = process.env.MEMBERS1ST_COOKIE;
+  const cookie = getCookieValue();
   if (cookie) headers.Cookie = buildCookieHeader(cookie);
 
   const authorization = process.env.MEMBERS1ST_AUTHORIZATION;
