@@ -386,6 +386,32 @@ The cookie file approach is more convenient as:
 - You can easily update the cookie without changing your scripts
 - The file is gitignored by default for security
 - It works well with MCP client configurations (see `examples/` directory)
+- **Automatic retry on 401**: If a request receives a 401 Unauthorized response, the system will automatically reload credentials from the cookie file and retry the request once. This allows you to update expired cookies without restarting the server.
+
+#### Handling Expired Cookies
+
+When using the Members1st backend, cookies may expire after a period of time. The server includes automatic 401 retry logic:
+
+1. If a request returns `401 Unauthorized`, the system will:
+   - Log a message to stderr: `[Members1st] Received 401 Unauthorized, reloading credentials and retrying...`
+   - Clear any cached account data
+   - Reload credentials from the cookie file (or environment variable)
+   - Automatically retry the request once
+
+2. To update an expired cookie without restarting the server:
+   - When using `MEMBERS1ST_COOKIE_FILE`, simply update the file with the new cookie value
+   - The next request will automatically use the updated cookie
+   - If a 401 occurs, the retry will read the fresh cookie from the file
+
+3. Example workflow:
+   ```bash
+   # Server returns 401 with expired cookie
+   # Update the cookie file:
+   echo 'new_cookie_value' > .members1st-cookie
+   # The system automatically retries with the new cookie
+   ```
+
+This feature is particularly useful for long-running server instances where cookies may expire during operation.
 
 ## CI/CD and Automation
 

@@ -13,7 +13,15 @@ export type HttpResult = {
 /** Maximum number of HTTP redirects to follow */
 const DEFAULT_MAX_REDIRECTS = 5;
 
-export async function httpGet(urlString: string, headers: Record<string, string>, maxRedirects = DEFAULT_MAX_REDIRECTS): Promise<HttpResult> {
+/** Callback type for reloading headers on 401 */
+export type ReloadHeadersCallback = () => Record<string, string>;
+
+export async function httpGet(
+  urlString: string, 
+  headers: Record<string, string>, 
+  maxRedirects = DEFAULT_MAX_REDIRECTS,
+  reloadHeadersOnAuth?: ReloadHeadersCallback
+): Promise<HttpResult> {
   let current = new URL(urlString);
   
   // Log the initial request
@@ -29,6 +37,16 @@ export async function httpGet(urlString: string, headers: Record<string, string>
     if (isRedirect && location) {
       current = new URL(Array.isArray(location) ? location[0] : location, current);
       continue;
+    }
+    
+    // Check for 401 Unauthorized and retry once with reloaded headers
+    if (status === 401 && reloadHeadersOnAuth) {
+      console.error(`[Members1st] Received 401 Unauthorized, reloading credentials and retrying...`);
+      const newHeaders = reloadHeadersOnAuth();
+      logApiRequest("GET", urlString, newHeaders);
+      const retryRes = await httpGetOnce(new URL(urlString), newHeaders);
+      logApiResponse(urlString, retryRes.statusCode, retryRes.statusMessage, retryRes.body);
+      return retryRes;
     }
     
     // Log the response
