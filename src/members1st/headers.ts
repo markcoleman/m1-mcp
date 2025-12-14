@@ -45,6 +45,8 @@ export function readCookieFromFile(filePath: string): string | undefined {
     const content = readFileSync(absolutePath, "utf-8");
     return content.trim();
   } catch {
+    // Silent failure is intentional - file not existing is expected when env var isn't set
+    // or user hasn't created the file yet. Caller will handle undefined gracefully.
     return undefined;
   }
 }
