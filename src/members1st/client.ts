@@ -31,6 +31,14 @@ type Cached<T> = {
 let accountsCache: Cached<Account[]> | undefined;
 
 /**
+ * Clears the accounts cache. Used when authentication fails (401) to ensure
+ * fresh data is fetched with new credentials.
+ */
+export function clearAccountsCache(): void {
+  accountsCache = undefined;
+}
+
+/**
  * Fetches all accounts from the Members1st API.
  * Results are cached for MEMBERS1ST_CACHE_TTL_MS milliseconds (default 30s).
  * @returns Promise resolving to array of accounts
@@ -42,9 +50,16 @@ export async function fetchMembers1stAccounts(): Promise<Account[]> {
   if (!envBool("MEMBERS1ST_DISABLE_CACHE") && accountsCache && accountsCache.expiresAtMs > now) return accountsCache.value;
 
   const url = process.env.MEMBERS1ST_ACCOUNTS_URL ?? DEFAULT_ACCOUNTS_URL;
-  const headers = buildRequestHeaders({ Accept: "application/json" });
+  const baseHeaders = { Accept: "application/json" };
+  const headers = buildRequestHeaders(baseHeaders);
 
-  const res = await httpGet(url, headers, DEFAULT_MAX_REDIRECTS);
+  // Provide a callback to reload headers on 401, and clear cache
+  const reloadHeadersOnAuth = () => {
+    clearAccountsCache();
+    return buildRequestHeaders(baseHeaders);
+  };
+
+  const res = await httpGet(url, headers, DEFAULT_MAX_REDIRECTS, reloadHeadersOnAuth);
 
   if (res.statusCode < 200 || res.statusCode >= 300) {
     const text = res.body ?? "";
@@ -105,13 +120,20 @@ async function fetchMembers1stTransactionsChunk(
     ? `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}&type=${encodeURIComponent(productCode)}`
     : `${origin.replace(/\/$/, "")}/mega/product-details/transactions?id=${encodeURIComponent(productId)}`;
 
-  const headers = buildRequestHeaders({
+  const baseHeaders = {
     Accept: "application/json, text/plain, */*",
     Origin: origin,
     Referer: referer
-  });
+  };
+  const headers = buildRequestHeaders(baseHeaders);
 
-  const res = await httpGet(url.toString(), headers, DEFAULT_MAX_REDIRECTS);
+  // Provide a callback to reload headers on 401, and clear cache
+  const reloadHeadersOnAuth = () => {
+    clearAccountsCache();
+    return buildRequestHeaders(baseHeaders);
+  };
+
+  const res = await httpGet(url.toString(), headers, DEFAULT_MAX_REDIRECTS, reloadHeadersOnAuth);
   if (res.statusCode < 200 || res.statusCode >= 300) {
     const text = res.body ?? "";
     throw new Error(
