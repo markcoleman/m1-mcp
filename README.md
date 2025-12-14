@@ -339,6 +339,7 @@ Important:
 - `MEMBERS1ST_TRANSACTIONS_URL_BASE`: defaults to `https://myonline.members1st.org/api/v1/Transactions`
 - `MEMBERS1ST_ORIGIN`: defaults to `https://myonline.members1st.org` (used for `Origin`/`Referer` headers)
 - `MEMBERS1ST_COOKIE`: cookie value or full cookie header value (the implementation will wrap bare values as `M1Online=<value>`)
+- `MEMBERS1ST_COOKIE_FILE`: path to a file containing the cookie value (alternative to `MEMBERS1ST_COOKIE`, more convenient for long values)
 - `MEMBERS1ST_AUTHORIZATION`: value for the `Authorization` header (e.g. `Bearer ...`) if applicable
 - `MEMBERS1ST_HEADERS_JSON`: optional JSON object string of extra headers to attach to outbound requests
 - `MEMBERS1ST_CACHE_TTL_MS`: cache duration for accounts fetch (default `30000`)
@@ -359,14 +360,32 @@ Logged information includes:
 - Response status code and message (when `LOG_API_RESPONSES` is enabled)
 - Response body preview (when `LOG_API_RESPONSES` is enabled, truncated to 500 characters)
 
-#### Example
+#### Example Usage
 
+**Option 1: Direct cookie value**
 ```bash
 export DATA_SOURCE=members1st
 export MEMBERS1ST_COOKIE='your_cookie_or_cookie_header_here'
 
 npm run dev:http
 ```
+
+**Option 2: Cookie from file (recommended)**
+```bash
+# Create a cookie file
+echo 'your_cookie_value_here' > .members1st-cookie
+
+# Configure to use the file
+export DATA_SOURCE=members1st
+export MEMBERS1ST_COOKIE_FILE=.members1st-cookie
+
+npm run dev:http
+```
+
+The cookie file approach is more convenient as:
+- You can easily update the cookie without changing your scripts
+- The file is gitignored by default for security
+- It works well with MCP client configurations (see `examples/` directory)
 
 ## CI/CD and Automation
 
