@@ -20,7 +20,7 @@
     "test": "npm run test:unit && npm run test:integration"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "dotenv": "^17.2.3",
     "zod": "^4.1.13"
   },
